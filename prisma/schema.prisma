@@ -1,0 +1,253 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                       String    @id @default(cuid())
+  role                     String?   @default("subscriber") @db.VarChar(50)
+  email                    String    @unique @db.VarChar(100)
+  password                 String    @db.VarChar(100) // Se debe hashear
+  token                    String?   @unique @db.VarChar(255)
+  status                   String?   @default("active") @db.VarChar(50) // active, inactive, pending_verification
+  locale                   String?   @default("es") @db.VarChar(10)
+  user_name                String?   @db.VarChar(100)
+  user_data                Json?     @default("{}") // Perfil, preferencias, etc.
+  user_password_token      String?   @db.VarChar(100)
+  user_password_token_exp  DateTime? // Expiración del token de reseteo
+  email_verification_token String?   @db.VarChar(100)
+  email_verified_at        DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? @map("deleted_at")
+
+  subscriptions Subscription[]
+  payments      Payment[]
+  images        Image[]
+  cvs           Cv[]
+  coverLetters  CoverLetter[]
+  apiTokens     ApiToken[]
+}
+
+model Image {
+  id         String  @id @default(cuid())
+  user_id    String  @db.VarChar(100)
+  type       String? @default("profile") @db.VarChar(50) // profile, cv_asset, etc.
+  image_name String  @db.VarChar(100)
+  image_type String  @db.VarChar(50) // mime type
+  image_url  String? @db.Text // URL si se almacena en un servicio externo (S3, Cloudinary)
+  image_path String? @db.Text // Path si se almacena localmente (considerar esto cuidadosamente)
+  image_size Int     @default(0) // en bytes
+  image_data Json?   @default("{}") // Metadatos adicionales
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model Subscription {
+  id                   String    @id @default(cuid())
+  user_id              String    @unique @db.VarChar(100)
+  plan_id              String    @db.VarChar(100) // Referencia a un modelo Plan si tienes diferentes tipos de planes
+  status               String    @default("pending") @db.VarChar(50) // active, inactive, cancelled, past_due, trialing
+  trial_start          DateTime?
+  trial_end            DateTime?
+  current_period_start DateTime?
+  current_period_end   DateTime?
+  cancel_at_period_end Boolean?  @default(false)
+  cancelled_at         DateTime?
+  ended_at             DateTime? // Cuando la suscripción termina definitivamente
+  metadata             Json?     @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  plan Plan? @relation(fields: [plan_id], references: [id]) // Opcional, si tienes un modelo Plan
+}
+
+model Plan {
+  id               String  @id @default(cuid())
+  name             String  @unique @db.VarChar(100)
+  description      String? @db.Text
+  price            Float // Precio mensual/anual
+  currency         String  @default("EUR") @db.VarChar(10)
+  billing_interval String  @default("month") @db.VarChar(20) // month, year
+  features         Json?   @default("[]") // Lista de características del plan
+  active           Boolean @default(true)
+  stripe_plan_id   String? @unique @db.VarChar(100) // ID del plan en Stripe u otro procesador
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subscriptions Subscription[]
+}
+
+model Payment {
+  id                   String    @id @default(cuid())
+  user_id              String    @db.VarChar(100)
+  subscription_id      String?   @db.VarChar(100) // Para asociar a una suscripción específica
+  amount               Float
+  currency             String    @default("EUR") @db.VarChar(10)
+  status               String    @default("pending") @db.VarChar(50) // pending, succeeded, failed, refunded
+  method               String?   @db.VarChar(50) // card, paypal, etc.
+  processor            String    @db.VarChar(50) // tefpay, stripe, etc.
+  processor_payment_id String?   @unique @db.VarChar(255) // ID del pago en el procesador
+  processor_response   Json?     @default("{}")
+  error_message        String?   @db.Text
+  refunded_amount      Float?    @default(0)
+  refund_reason        String?   @db.Text
+  paid_at              DateTime?
+  refunded_at          DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [user_id], references: [id], onDelete: NoAction) // NoAction para mantener historial de pagos si el usuario se elimina
+  // subscription Subscription? @relation(fields: [subscription_id], references: [id]) // Descomentar si se usa subscription_id
+}
+
+model TefPayNotification {
+  id                          String  @id @default(cuid())
+  ds_Order                    String? @db.VarChar(100) // Importante para identificar la transacción
+  ds_Code                     String? @db.VarChar(10) // Código de resultado de la operación
+  ds_Merchant_MatchingData    String? @db.Text
+  ds_Date                     String? @db.VarChar(20)
+  ds_Hour                     String? @db.VarChar(20)
+  ds_SecurePayment            String? @db.VarChar(1) // 0 o 1
+  ds_Card_Type                String? @db.VarChar(10) // CR, DB
+  ds_Card_Country             String? @db.VarChar(3)
+  ds_AuthorisationCode        String? @db.VarChar(100)
+  ds_Merchant_TransactionType String? @db.VarChar(10)
+  ds_Merchant_MerchantCode    String? @db.VarChar(50)
+  ds_Merchant_Terminal        String? @db.VarChar(10)
+  ds_Amount                   String? @db.VarChar(20) // En céntimos
+  ds_Currency                 String? @db.VarChar(10)
+  ds_Signature                String? @db.VarChar(255) // Firma para validar la notificación
+  raw_notification            Json    @default("{}")
+  status                      String  @default("received") @db.VarChar(50) // received, processed, error
+  processing_notes            String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model EmailLog {
+  id                  String    @id @default(cuid())
+  user_id             String?   @db.VarChar(100) // Opcional si son emails transaccionales no ligados a un usuario
+  recipient_email     String    @db.VarChar(100)
+  subject             String    @db.VarChar(255)
+  body                String?   @db.Text // O un path a una plantilla
+  status              String    @default("pending") @db.VarChar(50) // pending, sent, failed, bounced
+  sent_at             DateTime?
+  error_message       String?   @db.Text
+  provider_message_id String?   @db.VarChar(255)
+  type                String    @db.VarChar(50) // welcome, password_reset, cv_shared, etc.
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// --- Modelos específicos para CV Creator ---
+
+model Cv {
+  id             String    @id @default(cuid())
+  user_id        String    @db.VarChar(100)
+  title          String    @db.VarChar(150)
+  slug           String?   @unique @db.VarChar(200) // Para URLs amigables si se comparten
+  description    String?   @db.Text
+  template_id    String?   @db.VarChar(100) // ID de la plantilla usada
+  content        Json // Estructura JSON del CV (secciones, campos, etc.)
+  settings       Json?     @default("{}") // Configuración específica del CV (colores, fuentes)
+  is_public      Boolean   @default(false)
+  share_token    String?   @unique @db.VarChar(100) // Token para compartir CVs privados
+  version        Int       @default(1)
+  last_viewed_at DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? @map("deleted_at")
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  // template    Template? @relation(fields: [template_id], references: [id]) // Si tienes un modelo Template
+  // sections    CvSection[] // Si decides normalizar las secciones
+}
+
+model CoverLetter {
+  id          String  @id @default(cuid())
+  user_id     String  @db.VarChar(100)
+  title       String  @db.VarChar(150)
+  slug        String? @unique @db.VarChar(200)
+  template_id String? @db.VarChar(100)
+  content     Json // Estructura JSON de la carta
+  settings    Json?   @default("{}")
+  is_public   Boolean @default(false)
+  share_token String? @unique @db.VarChar(100)
+  version     Int     @default(1)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? @map("deleted_at")
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  // template    Template? @relation(fields: [template_id], references: [id])
+}
+
+model Template {
+  id                String  @id @default(cuid())
+  name              String  @unique @db.VarChar(100)
+  type              String  @db.VarChar(50) // cv, cover_letter
+  description       String? @db.Text
+  preview_image_url String? @db.Text
+  structure         Json // Estructura base de la plantilla
+  category          String? @db.VarChar(50) // modern, classic, creative
+  is_premium        Boolean @default(false)
+  usage_count       Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // cvs           Cv[]
+  // coverLetters  CoverLetter[]
+}
+
+// Modelo para tokens de API (si se ofrece acceso programático)
+model ApiToken {
+  id           String    @id @default(cuid())
+  user_id      String    @db.VarChar(100)
+  name         String?   @db.VarChar(100)
+  token        String    @unique @db.VarChar(255) // El token hasheado
+  permissions  Json?     @default("[]") // Lista de permisos: e.g., ["cv:read", "cv:create"]
+  last_used_at DateTime?
+  expires_at   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+// Auditoría de acciones importantes
+model AuditLog {
+  id          String  @id @default(cuid())
+  user_id     String? @db.VarChar(100) // Quién realizó la acción (puede ser null para acciones del sistema)
+  action      String  @db.VarChar(100) // e.g., USER_LOGIN, CV_CREATED, PAYMENT_SUCCEEDED
+  target_type String? @db.VarChar(50) // e.g., User, Cv, Payment
+  target_id   String? @db.VarChar(100) // ID del recurso afectado
+  details     Json?   @default("{}") // Detalles adicionales de la acción
+  ip_address  String? @db.VarChar(50)
+  user_agent  String? @db.Text
+
+  createdAt DateTime @default(now())
+}
