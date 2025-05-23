@@ -1,22 +1,18 @@
-import { OmitType } from "@nestjs/swagger";
-import {
-  SubscriptionDto,
-  // SubscriptionStatus
-} from "./subscription.dto";
+import { PickType } from "@nestjs/swagger";
+import { SubscriptionDto } from "./subscription.dto";
+import { IsString, IsOptional } from "class-validator";
+import { ApiProperty } from "@nestjs/swagger";
 
-export class CreateSubscriptionDto extends OmitType(SubscriptionDto, [
-  "id",
-  "createdAt",
-  "updatedAt",
-  "status", // El estado inicial se manejará en el servicio
-  "trial_start",
-  "trial_end",
-  "current_period_start",
-  "current_period_end",
-  "cancel_at_period_end",
-  "cancelled_at",
-  "ended_at",
+export class CreateSubscriptionDto extends PickType(SubscriptionDto, [
+  "user_id",
+  "plan_id",
 ] as const) {
-  // Puedes añadir validaciones específicas para la creación si es necesario
-  // Por ejemplo, asegurar que user_id y plan_id siempre estén presentes
+  @ApiProperty({
+    description: "Payment ID that triggered this subscription, if applicable",
+    example: "pay_abcdef123456",
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  payment_id?: string;
 }

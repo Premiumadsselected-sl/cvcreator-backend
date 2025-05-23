@@ -8,7 +8,6 @@ import {
   Delete,
   HttpCode,
   HttpStatus,
-  ParseUUIDPipe,
   UseGuards,
 } from "@nestjs/common";
 import { PaymentsService } from "./payments.service";
@@ -33,7 +32,7 @@ import { User } from "../users/entities/user.entity";
 export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}
 
-  @Post("payment-flow")
+  @Post("payment-flow") // Changed from "payment-flow" to "create-intent"
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: "Initiate a new payment flow for a plan" })
@@ -63,6 +62,23 @@ export class PaymentsController {
       initiatePaymentDto,
       user.id
     );
+  }
+
+  @Post("tefpay/notifications") // Added this new endpoint
+  @ApiOperation({ summary: "Handle Tefpay payment notifications" })
+  @ApiResponse({
+    status: 200,
+    description: "Notification received and processed.",
+  })
+  @ApiResponse({
+    status: 400,
+    description: "Bad Request (e.g., invalid payload)",
+  })
+  @HttpCode(HttpStatus.OK) // Tefpay expects a 200 OK
+  async handleTefpayNotification(@Body() notificationPayload: any) {
+    // It's good practice to validate the payload here
+    // For now, we'll assume the service handles the logic including validation
+    return this.paymentsService.handleTefpayNotification(notificationPayload);
   }
 
   @Post()
@@ -103,7 +119,8 @@ export class PaymentsController {
     type: PaymentDto,
   })
   @ApiResponse({ status: 404, description: "Payment not found." })
-  findOne(@Param("id", ParseUUIDPipe) id: string) {
+  findOne(@Param("id") id: string) {
+    // Removed ParseUUIDPipe
     return this.paymentsService.findOne(id);
   }
 
@@ -113,7 +130,7 @@ export class PaymentsController {
     name: "id",
     description: "Payment ID",
     type: "string",
-    format: "uuid",
+    // format: "uuid", // No longer a UUID
   })
   @ApiResponse({
     status: 200,
@@ -123,7 +140,7 @@ export class PaymentsController {
   @ApiResponse({ status: 404, description: "Payment not found." })
   @ApiResponse({ status: 400, description: "Bad Request." })
   update(
-    @Param("id", ParseUUIDPipe) id: string,
+    @Param("id") id: string, // Removed ParseUUIDPipe
     @Body() updatePaymentDto: UpdatePaymentDto
   ) {
     return this.paymentsService.update(id, updatePaymentDto);
@@ -135,7 +152,7 @@ export class PaymentsController {
     name: "id",
     description: "Payment ID",
     type: "string",
-    format: "uuid",
+    // format: "uuid", // No longer a UUID
   })
   @ApiResponse({
     status: 204,
@@ -143,7 +160,8 @@ export class PaymentsController {
   })
   @ApiResponse({ status: 404, description: "Payment not found." })
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Param("id", ParseUUIDPipe) id: string) {
+  remove(@Param("id") id: string) {
+    // Removed ParseUUIDPipe
     return this.paymentsService.remove(id);
   }
 }

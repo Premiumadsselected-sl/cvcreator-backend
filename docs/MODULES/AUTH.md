@@ -24,9 +24,26 @@ src/
 ```
 
 - `auth.controller.ts`: (Próximamente) Manejará las rutas HTTP relacionadas con la autenticación (ej. `/auth/register`, `/auth/login`).
-- `auth.service.ts`: (Próximamente) Contendrá la lógica de negocio para el registro, inicio de sesión y gestión de tokens.
+- `auth.service.ts`: Contendrá la lógica de negocio para el registro, inicio de sesión y gestión de tokens.
 - `auth.module.ts`: Define el módulo `AuthModule` de NestJS, encapsulando todos los componentes relacionados con la autenticación.
 - `dto/`: Contiene los Data Transfer Objects (DTOs) utilizados para la validación y estructuración de datos en las solicitudes y respuestas de autenticación.
+
+## Pruebas
+
+Se han implementado pruebas unitarias y de integración para el módulo de autenticación:
+
+- **Pruebas Unitarias (`test/unit/auth/auth.service.spec.ts`):**
+
+  - Prueban la lógica de negocio de `AuthService` de forma aislada.
+  - Mockean dependencias como `UsersService` y `JwtService`.
+  - Cubren escenarios de éxito y error para los métodos `register`, `login`, `validateUserById` y `getProfile`.
+
+- **Pruebas de Integración (`test/integration/auth/auth.module.spec.ts`):**
+  - Prueban la correcta instanciación y configuración del `AuthModule`.
+  - Verifican que los proveedores principales como `AuthService` y `JwtService` se puedan resolver correctamente dentro del contexto del módulo.
+  - Aseguran la correcta importación de módulos dependientes como `UsersModule` y la disponibilidad de sus servicios exportados.
+
+Para ejecutar estas pruebas, consulta la sección de [Pruebas](../../TESTING.md).
 
 ## Data Transfer Objects (DTOs)
 

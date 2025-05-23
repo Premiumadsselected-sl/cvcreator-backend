@@ -6,6 +6,9 @@ import { PassportModule } from "@nestjs/passport";
 import { JwtModule } from "@nestjs/jwt";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { JwtStrategy } from "./jwt.strategy";
+import { AuditLogsModule } from "../audit-logs/audit-logs.module"; // Importar AuditLogsModule
+import { JwtAuthGuard } from "./guards/jwt-auth.guard";
+import { RolesGuard } from "./guards/roles.guard";
 
 @Module({
   imports: [
@@ -22,9 +25,10 @@ import { JwtStrategy } from "./jwt.strategy";
       inject: [ConfigService], // Inyecta ConfigService en useFactory.
     }),
     ConfigModule, // Necesario si ConfigModule no es global y se usa en registerAsync.
+    AuditLogsModule, // Añadir AuditLogsModule a los imports
   ],
-  providers: [AuthService, JwtStrategy], // Proveedores del módulo de autenticación.
+  providers: [AuthService, JwtStrategy, JwtAuthGuard, RolesGuard], // Proveedores del módulo de autenticación.
   controllers: [AuthController],
-  exports: [AuthService, JwtModule, PassportModule], // Exporta servicios y módulos para ser usados externamente.
+  exports: [AuthService, JwtModule, PassportModule, JwtAuthGuard, RolesGuard], // Exporta servicios y módulos para ser usados externamente.
 })
 export class AuthModule {}

@@ -41,11 +41,14 @@ Hay muchas formas de contribuir:
 
 4.  **Realiza tus Cambios**: Escribe tu código, tests y documentación. Sigue las guías de estilo de código (ver sección abajo).
 
-5.  **Prueba tus Cambios**: Asegúrate de que todos los tests existentes pasen y, si estás añadiendo nueva funcionalidad, escribe nuevos tests para cubrirla.
+5.  **Prueba tus Cambios**: Asegúrate de que todos los tests existentes pasen y, si estás añadiendo nueva funcionalidad, escribe nuevos tests para cubrirla. Consulta el archivo `TESTING.md` para más detalles sobre cómo ejecutar los diferentes tipos de pruebas.
 
     ```bash
-    pnpm run test       # Tests unitarios
-    pnpm run test:e2e   # Tests E2E (asegúrate que la DB de test esté configurada)
+    pnpm test           # Ejecuta todos los tests (unitarios, integración, e2e)
+    # o específicamente:
+    pnpm test:unit      # Tests unitarios
+    pnpm test:integration # Tests de integración
+    pnpm test:e2e       # Tests E2E (asegúrate que la DB de test esté configurada)
     ```
 
 6.  **Haz Commit de tus Cambios**: Escribe mensajes de commit claros y descriptivos. Se recomienda seguir la convención de [Commits Convencionales](https://www.conventionalcommits.org/).

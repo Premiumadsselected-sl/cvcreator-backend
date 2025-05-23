@@ -41,4 +41,12 @@ export class RegisterUserDto {
   @IsString()
   @IsOptional()
   lastName?: string;
+
+  @ApiPropertyOptional({
+    description: "Nombre de usuario (puede ser autogenerado o provisto).",
+    example: "johndoe",
+  })
+  @IsString()
+  @IsOptional()
+  username?: string; // Mantenemos username por si se quiere pasar explícitamente
 }

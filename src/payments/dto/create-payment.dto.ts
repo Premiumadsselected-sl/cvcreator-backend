@@ -1,12 +1,6 @@
 import { OmitType, ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { PaymentDto, PaymentStatus } from "./payment.dto";
-import {
-  IsString,
-  IsOptional,
-  IsEnum,
-  IsObject,
-  IsInt, // Asegurarse que IsInt se usa
-} from "class-validator";
+import { IsString, IsOptional, IsEnum, IsObject } from "class-validator";
 
 export class CreatePaymentDto extends OmitType(PaymentDto, [
   "id",
@@ -19,17 +13,17 @@ export class CreatePaymentDto extends OmitType(PaymentDto, [
   "error_message",
   "refunded_amount",
   "refund_reason",
-  "processor", // Se omite para redefinirlo como opcional
+  "processor",
 ] as const) {
   @ApiProperty({
     description:
       "Payment processor to be used. Defaults to ACTIVE_PAYMENT_PROCESSOR if not provided.",
     example: "tefpay",
-    required: false, // Cambiado a false
+    required: false,
   })
-  @IsOptional() // Añadido
+  @IsOptional()
   @IsString()
-  processor?: string; // Cambiado a opcional
+  processor?: string;
 
   @ApiPropertyOptional({
     description: "ID of the plan related to this payment",
@@ -58,9 +52,9 @@ export class CreatePaymentDto extends OmitType(PaymentDto, [
   processor_response?: any;
 
   @ApiPropertyOptional({ description: "Timestamp when the payment was made" })
-  @IsString() // O IsDateString si se prefiere validar como fecha ISO8601
+  @IsString()
   @IsOptional()
-  paid_at?: string | Date; // Prisma espera Date, pero DTO puede recibir string
+  paid_at?: string | Date;
 
   @ApiPropertyOptional({ description: "Current status of the payment" })
   @IsEnum(PaymentStatus)

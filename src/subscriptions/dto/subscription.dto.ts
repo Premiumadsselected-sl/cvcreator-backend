@@ -1,13 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
+  IsEnum,
+  IsString,
   IsNotEmpty,
   IsOptional,
-  IsEnum,
-  IsDateString,
-  IsUUID,
+  IsDate,
   IsBoolean,
   IsObject,
 } from "class-validator";
+import { Type } from "class-transformer";
 
 export enum SubscriptionStatus {
   ACTIVE = "active",
@@ -15,7 +16,7 @@ export enum SubscriptionStatus {
   CANCELLED = "cancelled",
   PAST_DUE = "past_due",
   TRIALING = "trialing",
-  PENDING = "pending", // Agregado para estados iniciales o pendientes de pago
+  PENDING = "pending",
 }
 
 export class SubscriptionDto {
@@ -23,7 +24,7 @@ export class SubscriptionDto {
     description: "Subscription unique identifier",
     example: "sub_abcdef123456",
   })
-  @IsUUID()
+  @IsString()
   @IsNotEmpty()
   id: string;
 
@@ -31,7 +32,7 @@ export class SubscriptionDto {
     description: "User ID associated with the subscription",
     example: "user_abcdef123456",
   })
-  @IsUUID()
+  @IsString()
   @IsNotEmpty()
   user_id: string;
 
@@ -39,7 +40,7 @@ export class SubscriptionDto {
     description: "Plan ID associated with the subscription",
     example: "plan_abcdef123456",
   })
-  @IsUUID()
+  @IsString()
   @IsNotEmpty()
   plan_id: string;
 
@@ -53,22 +54,26 @@ export class SubscriptionDto {
   status: SubscriptionStatus;
 
   @ApiPropertyOptional({ description: "Trial start date" })
-  @IsDateString()
+  @Type(() => Date)
+  @IsDate()
   @IsOptional()
   trial_start?: Date;
 
   @ApiPropertyOptional({ description: "Trial end date" })
-  @IsDateString()
+  @Type(() => Date)
+  @IsDate()
   @IsOptional()
   trial_end?: Date;
 
   @ApiPropertyOptional({ description: "Current billing period start date" })
-  @IsDateString()
+  @Type(() => Date)
+  @IsDate()
   @IsOptional()
   current_period_start?: Date;
 
   @ApiPropertyOptional({ description: "Current billing period end date" })
-  @IsDateString()
+  @Type(() => Date)
+  @IsDate()
   @IsOptional()
   current_period_end?: Date;
 
@@ -84,14 +89,16 @@ export class SubscriptionDto {
   @ApiPropertyOptional({
     description: "Date when the subscription was cancelled",
   })
-  @IsDateString()
+  @Type(() => Date)
+  @IsDate()
   @IsOptional()
   cancelled_at?: Date;
 
   @ApiPropertyOptional({
     description: "Date when the subscription ended definitively",
   })
-  @IsDateString()
+  @Type(() => Date)
+  @IsDate()
   @IsOptional()
   ended_at?: Date;
 
@@ -103,10 +110,12 @@ export class SubscriptionDto {
   metadata?: any;
 
   @ApiProperty({ description: "Creation timestamp" })
-  @IsDateString()
+  @Type(() => Date)
+  @IsDate()
   createdAt: Date;
 
   @ApiProperty({ description: "Last update timestamp" })
-  @IsDateString()
+  @Type(() => Date)
+  @IsDate()
   updatedAt: Date;
 }

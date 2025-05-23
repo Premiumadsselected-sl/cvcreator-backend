@@ -98,7 +98,7 @@ export class TefpayService implements IPaymentProcessor {
     return calculatedSignature;
   }
 
-  // Changed to be synchronous as no async operations are performed inside
+  // Corrected method to align with IPaymentProcessor interface
   preparePaymentParameters(
     params: PreparePaymentParams
   ): PreparedPaymentResponse {
@@ -106,47 +106,71 @@ export class TefpayService implements IPaymentProcessor {
       amount,
       currency,
       order,
-      product_description,
+      success_url,
+      cancel_url,
+      metadata,
       customer_email,
-      merchant_data,
-      success_url, // from PreparePaymentParams
-      cancel_url, // from PreparePaymentParams
-      notification_url, // from PreparePaymentParams
+      product_description,
     } = params;
 
-    const appBaseUrl = this.configService.get<string>("APP_BASE_URL", ""); // Provide a default empty string
-    const defaultSuccessUrl = `${appBaseUrl}/payment/success?order_id=${order}`;
-    const defaultCancelUrl = `${appBaseUrl}/payment/failure?order_id=${order}`;
-    const defaultNotificationUrl = `${this.configService.get<string>(
-      "DOMAIN_URL"
-    )}/payments/tefpay/notify`; // Ensure DOMAIN_URL is set
+    // Tefpay expects amount in cents (integer)
+    const amountInCents = Math.round(amount * 100).toString();
+
+    const notificationUrl = `${this.configService.get<string>(
+      "APP_URL"
+    )}/payments/tefpay/notifications`;
+
+    // Construct merchantParameters carefully, ensuring all parts are defined
+    const merchantParamsObject: Record<string, any> = {
+      order_id: order, // Use 'order' from params
+    };
+    if (metadata?.userId) {
+      merchantParamsObject.user_id = metadata.userId;
+    }
+    if (metadata?.paymentId) {
+      merchantParamsObject.payment_id = metadata.paymentId;
+    }
+
+    const merchantParameters = JSON.stringify(merchantParamsObject);
 
     const fields: Record<string, string> = {
-      Ds_Merchant_Amount: String(amount), // Amount in cents
-      Ds_Merchant_Currency: currency, // ISO 4217 currency code (e.g., 978 for EUR)
-      Ds_Merchant_Order: order,
+      Ds_Merchant_Amount: amountInCents,
+      Ds_Merchant_Currency: currency === "EUR" ? "978" : "840", // 978 for EUR, 840 for USD (ensure this mapping is correct)
+      Ds_Merchant_Order: order.substring(0, 12), // Tefpay order ID max 12 chars
       Ds_Merchant_MerchantCode: this.tefpayMerchantCode,
-      Ds_Merchant_Terminal: "1", // Default terminal, usually 1
-      Ds_Merchant_TransactionType: "0", // 0 for Authorization, check Tefpay docs
-      Ds_Merchant_ProductDescription: product_description || `Pedido ${order}`,
-      Ds_Merchant_Titular: customer_email || "", // Can be user's name or email
-      Ds_Merchant_MerchantData: merchant_data || "", // Optional data
-      Ds_Merchant_UrlOK: success_url || defaultSuccessUrl,
-      Ds_Merchant_UrlKO: cancel_url || defaultCancelUrl,
-      Ds_Merchant_UrlNotification: notification_url || defaultNotificationUrl,
-      // Ds_Merchant_PayMethods: 'C', // C for Card, T for Card + Bizum, etc. Check Tefpay docs.
+      Ds_Merchant_Terminal: "1", // Default terminal
+      Ds_Merchant_TransactionType: "0", // Authorization
+      Ds_Merchant_MerchantURL: notificationUrl, // URL for Tefpay to send notifications
+      Ds_Merchant_UrlOK: success_url || "", // Use success_url from params, provide default if undefined
+      Ds_Merchant_UrlKO: cancel_url || "", // Use cancel_url from params, provide default if undefined
+      Ds_Merchant_MerchantData:
+        Buffer.from(merchantParameters).toString("base64"), // Optional, for custom data
     };
 
-    fields.Ds_Merchant_MerchantSignature = this.calculateFormSignature(fields);
+    // Add optional fields if they are provided
+    if (customer_email) {
+      fields.Ds_Merchant_Customer_Mail = customer_email;
+    }
+    if (product_description) {
+      fields.Ds_Merchant_ProductDescription = product_description;
+    }
 
-    this.logger.debug("Tefpay form parameters prepared:", {
-      url: this.tefpayFormUrl,
-      fields,
-    });
+    const signature = this.calculateFormSignature(fields);
+
+    const formInputs = {
+      ...fields,
+      Ds_SignatureVersion: "HMAC_SHA256_V1", // Or whatever version Tefpay uses
+      Ds_Signature: signature,
+    };
+
+    this.logger.log(
+      `Preparing Tefpay payment for order ${order} with amount ${amount} ${currency}`
+    );
+    this.logger.debug(`Tefpay form inputs: ${JSON.stringify(formInputs)}`);
 
     return {
-      url: this.tefpayFormUrl, // The URL to which the form (with these fields) should be POSTed
-      fields: fields, // These fields should be submitted as a POST request to the URL
+      url: this.tefpayFormUrl, // URL of the Tefpay payment page
+      fields: formInputs, // Data to be POSTed to the redirectUrl
       payment_processor_name: "tefpay",
     };
   }

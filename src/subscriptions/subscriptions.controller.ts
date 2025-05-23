@@ -6,7 +6,6 @@ import {
   Patch,
   Param,
   Delete,
-  ParseUUIDPipe,
   HttpCode,
   HttpStatus,
 } from "@nestjs/common";
@@ -51,7 +50,6 @@ export class SubscriptionsController {
     name: "id",
     description: "Subscription ID",
     type: "string",
-    format: "uuid",
   })
   @ApiResponse({
     status: 200,
@@ -59,7 +57,7 @@ export class SubscriptionsController {
     type: SubscriptionDto,
   })
   @ApiResponse({ status: 404, description: "Subscription not found." })
-  findOne(@Param("id", ParseUUIDPipe) id: string) {
+  findOne(@Param("id") id: string) {
     return this.subscriptionsService.findOne(id);
   }
 
@@ -69,7 +67,6 @@ export class SubscriptionsController {
     name: "id",
     description: "Subscription ID",
     type: "string",
-    format: "uuid",
   })
   @ApiResponse({
     status: 200,
@@ -79,7 +76,7 @@ export class SubscriptionsController {
   @ApiResponse({ status: 404, description: "Subscription not found." })
   @ApiResponse({ status: 400, description: "Bad Request." })
   update(
-    @Param("id", ParseUUIDPipe) id: string,
+    @Param("id") id: string,
     @Body() updateSubscriptionDto: UpdateSubscriptionDto
   ) {
     return this.subscriptionsService.update(id, updateSubscriptionDto);
@@ -91,7 +88,6 @@ export class SubscriptionsController {
     name: "id",
     description: "Subscription ID",
     type: "string",
-    format: "uuid",
   })
   @ApiResponse({
     status: 204,
@@ -99,7 +95,27 @@ export class SubscriptionsController {
   })
   @ApiResponse({ status: 404, description: "Subscription not found." })
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Param("id", ParseUUIDPipe) id: string) {
+  remove(@Param("id") id: string) {
     return this.subscriptionsService.remove(id);
+  }
+
+  @Get("user/:userId")
+  @ApiOperation({ summary: "Retrieve subscriptions by User ID" })
+  @ApiParam({
+    name: "userId",
+    description: "User ID",
+    type: "string",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "A list of subscriptions for the user.",
+    type: [SubscriptionDto],
+  })
+  @ApiResponse({
+    status: 404,
+    description: "User not found or no subscriptions for user.",
+  })
+  findByUserId(@Param("userId") userId: string) {
+    return this.subscriptionsService.findAllByUserId(userId);
   }
 }

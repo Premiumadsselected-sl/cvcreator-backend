@@ -70,6 +70,7 @@ describe("AuthService", () => {
       password: "password123",
       firstName: "Test",
       lastName: "User",
+      username: "testuser", // Añadir username aquí
     };
     const hashedPassword = "hashedPassword";
     const mockUser = {
@@ -100,8 +101,16 @@ describe("AuthService", () => {
       );
       expect(bcrypt.hash).toHaveBeenCalledWith(registerUserDto.password, 10);
       expect(mockUsersService.create).toHaveBeenCalledWith({
-        ...registerUserDto,
-        password: hashedPassword,
+        email: registerUserDto.email,
+        password: hashedPassword, // La contraseña hasheada
+        user_name: registerUserDto.username, // AuthService pasa el username del DTO, que es 'testuser' en este mock
+        user_data: {
+          // Asumiendo que firstName y lastName están dentro de user_data en el DTO o se construyen así
+          firstName: registerUserDto.firstName,
+          lastName: registerUserDto.lastName,
+        },
+        // Asegúrate de que todos los campos esperados por UsersService.create estén aquí
+        // y que coincidan con cómo AuthService.register los prepara.
       });
       expect(mockJwtService.sign).toHaveBeenCalledWith({
         sub: mockUser.id,

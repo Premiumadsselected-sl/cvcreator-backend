@@ -291,6 +291,4 @@ export class EmailsSystemService implements OnModuleInit {
       data.user_id // userId (si es un usuario logueado quien contacta)
     );
   }
-
-  // El método logEmail ya no es necesario aquí, se maneja dentro de sendMail
 }

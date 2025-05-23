@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { AppController } from "./app.controller"; // Import AppController
 import { PrismaModule } from "./prisma/prisma.module";
 import { ConfigModule } from "@nestjs/config";
 import { UsersModule } from "./users/users.module";
@@ -34,7 +35,7 @@ import { CvCreatorModule } from "./cvcreator/cvcreator.module"; // Módulo que a
     CvCreatorModule, // Módulo principal para las funcionalidades de creación de CVs.
   ],
   // Los controladores y proveedores suelen ser proporcionados por sus respectivos módulos importados.
-  controllers: [],
+  controllers: [AppController], // Add AppController here
   providers: [],
 })
 export class AppModule {}
