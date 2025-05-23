@@ -4,6 +4,7 @@ import { UsersService } from "../../../src/users/users.service";
 import { JwtService } from "@nestjs/jwt";
 import { PrismaService } from "../../../src/prisma/prisma.service";
 import { ConfigService } from "@nestjs/config";
+import { AuditLogsService } from "../../../src/audit-logs/audit-logs.service";
 import {
   ConflictException,
   NotFoundException,
@@ -16,6 +17,11 @@ import { UserDto } from "../../../src/users/dto/user.dto";
 
 // Mock de bcrypt
 jest.mock("bcrypt");
+
+// Mock de AuditLogsService
+const mockAuditLogsService = {
+  create: jest.fn(),
+};
 
 const mockUsersService = {
   findByEmail: jest.fn(),
@@ -37,6 +43,8 @@ describe("AuthService", () => {
   let service: AuthService;
   let usersService: UsersService;
   let jwtService: JwtService;
+  // Añadir AuditLogsService al scope del describe
+  let auditLogsService: AuditLogsService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -45,6 +53,7 @@ describe("AuthService", () => {
         { provide: UsersService, useValue: mockUsersService },
         { provide: JwtService, useValue: mockJwtService },
         { provide: PrismaService, useValue: mockPrismaService }, // Aunque no se use directamente
+        { provide: AuditLogsService, useValue: mockAuditLogsService }, // Añadir AuditLogsService mockeado
         // ConfigService es una dependencia de JwtModule, que AuthService usa indirectamente.
         // Sin embargo, para las pruebas unitarias de AuthService, mockeamos JwtService directamente,
         // por lo que no necesitamos mockear ConfigService aquí.
@@ -54,6 +63,7 @@ describe("AuthService", () => {
     service = module.get<AuthService>(AuthService);
     usersService = module.get<UsersService>(UsersService);
     jwtService = module.get<JwtService>(JwtService);
+    auditLogsService = module.get<AuditLogsService>(AuditLogsService); // Obtener la instancia mockeada
 
     // Limpiar mocks antes de cada prueba
     jest.clearAllMocks();

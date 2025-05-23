@@ -8,6 +8,7 @@ import { ConfigService } from "@nestjs/config";
 import { PAYMENT_PROCESSOR_TOKEN } from "../../../src/payments/payment-processor.token";
 import { IPaymentProcessor } from "../../../src/payments/processors/payment-processor.interface";
 import { HttpModule } from "@nestjs/axios";
+import { AuditLogsService } from "../../../src/audit-logs/audit-logs.service";
 // import { TefpayService } from "../../../src/payments/tefpay/tefpay.service"; // No se usa directamente en este spec
 import { CreatePaymentDto } from "../../../src/payments/dto/create-payment.dto"; // IMPORTAR CreatePaymentDto
 import { PaymentStatus } from "../../../src/payments/dto/payment.dto"; // IMPORTAR PaymentStatus si es necesario para los mocks
@@ -17,6 +18,11 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from "@nestjs/common";
+
+// Mock de AuditLogsService
+const mockAuditLogsService = {
+  create: jest.fn(),
+};
 
 const mockPaymentProcessor: jest.Mocked<IPaymentProcessor> = {
   preparePaymentParameters: jest.fn(),
@@ -69,6 +75,8 @@ const mockConfigService = {
 describe("PaymentsService", () => {
   let service: PaymentsService;
   let paymentProcessorMock: jest.Mocked<IPaymentProcessor>;
+  // Añadir AuditLogsService al scope del describe
+  let auditLogsService: AuditLogsService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -81,11 +89,13 @@ describe("PaymentsService", () => {
         { provide: PlansService, useValue: mockPlansService },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: PAYMENT_PROCESSOR_TOKEN, useValue: mockPaymentProcessor },
+        { provide: AuditLogsService, useValue: mockAuditLogsService }, // Añadir AuditLogsService mockeado
       ],
     }).compile();
 
     service = module.get<PaymentsService>(PaymentsService);
     paymentProcessorMock = module.get(PAYMENT_PROCESSOR_TOKEN);
+    auditLogsService = module.get<AuditLogsService>(AuditLogsService); // Obtener la instancia mockeada
 
     // Reiniciar mocks antes de cada prueba
     mockUsersService.findOne.mockReset();
