@@ -79,7 +79,7 @@ web_modules/
 .yarnclean
 
 # dotenv environment variables file
-.env
+# .env
 .env.test
 .env.production
 .env.development
