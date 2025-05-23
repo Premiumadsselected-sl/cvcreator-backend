@@ -1,0 +1,957 @@
+{
+  "info": {
+    "name": "cvcreator-backend API",
+    "_postman_id": "YOUR_COLLECTION_ID",
+    "description": "Postman collection for the cvcreator-backend API.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"testuser\",\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "register"]
+            },
+            "description": "Registers a new user."
+          },
+          "response": []
+        },
+        {
+          "name": "Login User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Logs in an existing user and returns a JWT token."
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "me"]
+            },
+            "description": "Retrieves the profile of the currently authenticated user."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newuser@example.com\",\n  \"password\": \"newpassword123\",\n  \"username\": \"newtestuser\",\n  \"firstName\": \"New\",\n  \"lastName\": \"User\",\n  \"roles\": [\"USER\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users"]
+            },
+            "description": "Creates a new user. (Typically admin role or specific setup)"
+          },
+          "response": []
+        },
+        {
+          "name": "Find All Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users?page=1&limit=10&sortBy=createdAt&sortOrder=DESC&filter[username]=test",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users"],
+              "query": [
+                { "key": "page", "value": "1", "description": "Page number" },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Items per page"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt",
+                  "description": "Field to sort by"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "DESC",
+                  "description": "Sort order (ASC/DESC)"
+                },
+                {
+                  "key": "filter[username]",
+                  "value": "test",
+                  "description": "Filter by username (example)"
+                }
+              ]
+            },
+            "description": "Retrieves a list of users with pagination and filtering."
+          },
+          "response": []
+        },
+        {
+          "name": "Get User Profile (Self)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "profile"]
+            },
+            "description": "Retrieves the profile of the authenticated user."
+          },
+          "response": []
+        },
+        {
+          "name": "Find One User",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "user_id_example",
+                  "description": "User ID"
+                }
+              ]
+            },
+            "description": "Retrieves a specific user by their ID."
+          },
+          "response": []
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"UpdatedFirstName\",\n  \"lastName\": \"UpdatedLastName\",\n  \"user_data\": {\"custom_field\": \"custom_value\"}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "user_id_example",
+                  "description": "User ID"
+                }
+              ]
+            },
+            "description": "Updates a specific user by their ID."
+          },
+          "response": []
+        },
+        {
+          "name": "Remove User",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "user_id_example",
+                  "description": "User ID"
+                }
+              ]
+            },
+            "description": "Deletes a specific user by their ID."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Audit Logs",
+      "item": [
+        {
+          "name": "Create Audit Log (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"user_cuid_example\",\n  \"action\": \"ADMIN_ACTION_EXAMPLE\",\n  \"target_type\": \"System\",\n  \"target_id\": \"system_component_id\",\n  \"details\": \"{\\\"info\\\":\\\"Admin performed an action\\\"}\",\n  \"ip_address\": \"192.168.1.100\",\n  \"user_agent\": \"PostmanRuntime/7.xx.x\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/audit-logs",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "audit-logs"]
+            },
+            "description": "Creates an audit log entry. Requires ADMIN role."
+          },
+          "response": []
+        },
+        {
+          "name": "Find All Audit Logs (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/audit-logs?skip=0&take=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "audit-logs"],
+              "query": [
+                {
+                  "key": "skip",
+                  "value": "0",
+                  "description": "Number of records to skip"
+                },
+                {
+                  "key": "take",
+                  "value": "10",
+                  "description": "Number of records to take"
+                }
+              ]
+            },
+            "description": "Retrieves a list of audit logs with pagination. Requires ADMIN role."
+          },
+          "response": []
+        },
+        {
+          "name": "Find One Audit Log (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/audit-logs/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "audit-logs", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "log_id_example",
+                  "description": "Audit Log ID"
+                }
+              ]
+            },
+            "description": "Retrieves a specific audit log by ID. Requires ADMIN role."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "CV Creator",
+      "item": [
+        {
+          "name": "Cover Letters",
+          "item": [
+            {
+              "name": "Create Cover Letter",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"user_id\": \"user_cuid_example\",\n  \"name\": \"My First Cover Letter\",\n  \"description\": \"A cover letter for a software engineering role.\",\n  \"content\": {\"blocks\": [{\"type\": \"paragraph\", \"data\": {\"text\": \"Dear Hiring Manager,...\"}}}\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/cvcreator/cover-letters",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "cvcreator", "cover-letters"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Find All Cover Letters (User)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/cvcreator/cover-letters?page=1&limit=10",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "cvcreator", "cover-letters"],
+                  "query": [
+                    { "key": "page", "value": "1" },
+                    { "key": "limit", "value": "10" }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Find All Cover Letters By User ID",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/cvcreator/cover-letters/user/:userId",
+                  "host": ["{{baseUrl}}"],
+                  "path": [
+                    "api",
+                    "cvcreator",
+                    "cover-letters",
+                    "user",
+                    ":userId"
+                  ],
+                  "variable": [
+                    { "key": "userId", "value": "user_cuid_example" }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Find One Cover Letter",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/cvcreator/cover-letters/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "cvcreator", "cover-letters", ":id"],
+                  "variable": [{ "key": "id", "value": "cl_id_example" }]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update Cover Letter",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Updated Cover Letter Name\",\n  \"content\": {\"blocks\": [{\"type\": \"paragraph\", \"data\": {\"text\": \"Updated content here...\"}}}\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/cvcreator/cover-letters/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "cvcreator", "cover-letters", ":id"],
+                  "variable": [{ "key": "id", "value": "cl_id_example" }]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Cover Letter",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/cvcreator/cover-letters/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "cvcreator", "cover-letters", ":id"],
+                  "variable": [{ "key": "id", "value": "cl_id_example" }]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "CVs",
+          "item": [
+            {
+              "name": "Create CV",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"user_id\": \"user_cuid_example\",\n  \"name\": \"My Professional CV\",\n  \"description\": \"CV for tech roles.\",\n  \"template_id\": \"template_cuid_example\",\n  \"cv_data\": {\"personal_info\": {\"name\": \"John Doe\"}, \"experience\": []}\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/cvcreator/cvs",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "cvcreator", "cvs"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Find All CVs (User)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/cvcreator/cvs?page=1&limit=10",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "cvcreator", "cvs"],
+                  "query": [
+                    { "key": "page", "value": "1" },
+                    { "key": "limit", "value": "10" }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Find All CVs By User ID",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/cvcreator/cvs/user/:userId",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "cvcreator", "cvs", "user", ":userId"],
+                  "variable": [
+                    { "key": "userId", "value": "user_cuid_example" }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Find One CV",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/cvcreator/cvs/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "cvcreator", "cvs", ":id"],
+                  "variable": [{ "key": "id", "value": "cv_id_example" }]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update CV",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Updated Professional CV Name\",\n  \"cv_data\": {\"personal_info\": {\"name\": \"Johnathan Doe\"}, \"experience\": [{\"title\": \"Senior Dev\"}]}\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/cvcreator/cvs/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "cvcreator", "cvs", ":id"],
+                  "variable": [{ "key": "id", "value": "cv_id_example" }]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete CV",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/cvcreator/cvs/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "cvcreator", "cvs", ":id"],
+                  "variable": [{ "key": "id", "value": "cv_id_example" }]
+                }
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "General Images",
+      "item": [
+        {
+          "name": "Upload General Image",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "Image file (jpeg, png, gif, webp), max 10MB"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/images",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "images"]
+            },
+            "description": "Upload a general-purpose image. Requires user or admin role."
+          },
+          "response": []
+        },
+        {
+          "name": "Find All General Images (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/images?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "images"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            },
+            "description": "Retrieves a list of all general-purpose images. Admin only."
+          },
+          "response": []
+        },
+        {
+          "name": "Find One General Image",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/images/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "images", ":id"],
+              "variable": [{ "key": "id", "value": "image_id_example" }]
+            },
+            "description": "Retrieves a specific general-purpose image by ID."
+          },
+          "response": []
+        },
+        {
+          "name": "Update General Image",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/images/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "images", ":id"],
+              "variable": [{ "key": "id", "value": "image_id_example" }]
+            },
+            "description": "Updates metadata for a general-purpose image."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete General Image",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/images/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "images", ":id"],
+              "variable": [{ "key": "id", "value": "image_id_example" }]
+            },
+            "description": "Deletes a general-purpose image."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Initiate Payment Flow",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plan_id\": \"plan_cuid_example\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/payment-flow",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payments", "payment-flow"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Handle Tefpay Notifications",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Ds_Order\": \"payment_id_example\",\n  \"Ds_Signature\": \"tefpay_signature_value\",\n  \"Ds_Response\": \"0000\"\n  // ... other Tefpay notification fields\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/tefpay/notifications",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payments", "tefpay", "notifications"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"user_cuid_example\",\n  \"amount\": 19.99,\n  \"currency\": \"EUR\",\n  \"plan_id\": \"plan_cuid_example\",\n  \"status\": \"pending\",\n  \"processor\": \"manual\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payments"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Find All Payments",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/payments?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payments"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Find One Payment",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payments", ":id"],
+              "variable": [{ "key": "id", "value": "payment_id_example" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Payment",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"succeeded\",\n  \"processor_response\": {\"message\": \"Payment confirmed manually\"}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payments", ":id"],
+              "variable": [{ "key": "id", "value": "payment_id_example" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Payment",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payments", ":id"],
+              "variable": [{ "key": "id", "value": "payment_id_example" }]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Subscriptions",
+      "item": [
+        {
+          "name": "Create Subscription",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"user_cuid_example\",\n  \"plan_id\": \"plan_cuid_example\",\n  \"payment_id\": \"payment_id_example\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/subscriptions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "subscriptions"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Find All Subscriptions",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/subscriptions?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "subscriptions"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Find Subscriptions by User ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/subscriptions/user/:userId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "subscriptions", "user", ":userId"],
+              "variable": [{ "key": "userId", "value": "user_cuid_example" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Find One Subscription",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/subscriptions/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "subscriptions", ":id"],
+              "variable": [{ "key": "id", "value": "sub_id_example" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Subscription",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"cancelled\",\n  \"cancel_at_period_end\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/subscriptions/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "subscriptions", ":id"],
+              "variable": [{ "key": "id", "value": "sub_id_example" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Subscription",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/subscriptions/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "subscriptions", ":id"],
+              "variable": [{ "key": "id", "value": "sub_id_example" }]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3001",
+      "type": "string"
+    },
+    {
+      "key": "jwtToken",
+      "value": "",
+      "type": "string",
+      "description": "JWT token obtained after login"
+    }
+  ]
+}
