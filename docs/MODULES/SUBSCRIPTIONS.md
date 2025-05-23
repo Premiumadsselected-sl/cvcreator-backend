@@ -1,0 +1,3 @@
+# Gestión de Suscripciones (SubscriptionsModule)
+
+Próximamente...

@@ -1,98 +1,142 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# CV Creator Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+## Descripción
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+CV Creator Backend es el sistema de servidor para la aplicación CV Creator. Proporciona una API RESTful para gestionar usuarios, currículums (CVs), cartas de presentación, plantillas, suscripciones y pagos. Está construido con [NestJS](https://nestjs.com/), un marco de trabajo progresivo de Node.js para construir aplicaciones del lado del servidor eficientes, confiables y escalables, utilizando [Prisma](https://www.prisma.io/) como ORM para la interacción con la base de datos PostgreSQL.
 
-## Description
+## Tecnologías Principales
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+- **Node.js**: Entorno de ejecución de JavaScript.
+- **NestJS**: Marco de trabajo para construir la API.
+- **TypeScript**: Superset de JavaScript que añade tipado estático.
+- **Prisma**: ORM para la interacción con la base de datos.
+- **PostgreSQL**: Sistema de gestión de bases de datos relacional.
+- **JWT (JSON Web Tokens)**: Para la autenticación y autorización.
+- **Swagger (OpenAPI)**: Para la documentación de la API (integrado con NestJS).
+- **PNPM**: Gestor de paquetes rápido y eficiente en el uso de espacio en disco.
 
-## Project setup
+## Requisitos Previos
 
-```bash
-$ pnpm install
+- Node.js (se recomienda la última versión LTS)
+- PNPM (instalable vía `npm install -g pnpm`)
+- PostgreSQL (servidor en ejecución)
+- Un editor de código (ej. VS Code)
+
+## Instalación
+
+1.  **Clonar el repositorio**:
+
+    ```bash
+    git clone <URL_DEL_REPOSITORIO>
+    cd cvcreator-backend
+    ```
+
+2.  **Instalar dependencias**:
+
+    ```bash
+    pnpm install
+    ```
+
+3.  **Configurar variables de entorno**:
+
+    - Copia el archivo `.env.example` (si existe) a `.env`:
+      ```bash
+      cp .env.example .env
+      ```
+    - Modifica el archivo `.env` con tu configuración local. Las variables clave incluyen:
+      - `DATABASE_URL`: Cadena de conexión a tu base de datos PostgreSQL.
+        Ejemplo: `postgresql://user:password@localhost:5432/mydatabase?schema=public`
+      - `JWT_API_SECRET`: Un secreto fuerte para firmar los tokens JWT.
+      - `PORT`: Puerto en el que se ejecutará la aplicación (por defecto 3000 o el especificado por NestJS).
+      - Otras configuraciones específicas de servicios (ej. Tefpay, servicios de email).
+
+4.  **Migraciones de la base de datos**:
+    Aplica las migraciones de Prisma para configurar el esquema de tu base de datos:
+    ```bash
+    pnpm prisma migrate dev
+    ```
+    Opcionalmente, puedes generar el cliente Prisma:
+    ```bash
+    pnpm prisma generate
+    ```
+
+## Ejecución de la Aplicación
+
+- **Modo Desarrollo (con auto-recarga)**:
+
+  ```bash
+  pnpm run start:dev
+  ```
+
+  La aplicación estará disponible por defecto en `http://localhost:3000` (o el puerto configurado).
+
+- **Modo Producción**:
+  Primero, construye la aplicación:
+  ```bash
+  pnpm run build
+  ```
+  Luego, inicia la aplicación:
+  ```bash
+  pnpm run start:prod
+  ```
+
+## Ejecución de Tests
+
+- **Tests Unitarios**:
+
+  ```bash
+  pnpm run test
+  ```
+
+- **Tests E2E (End-to-End)**:
+
+  ```bash
+  pnpm run test:e2e
+  ```
+
+  (Asegúrate de que la base de datos de test esté configurada y accesible).
+
+- **Cobertura de Tests**:
+  ```bash
+  pnpm run test:cov
+  ```
+
+## Estructura del Proyecto (Simplificada)
+
+```
+cvcreator-backend/
+├── prisma/               # Esquema y migraciones de Prisma
+├── src/                  # Código fuente de la aplicación
+│   ├── app.module.ts     # Módulo raíz de la aplicación
+│   ├── main.ts           # Archivo de entrada de la aplicación
+│   ├── auth/             # Módulo de autenticación
+│   ├── users/            # Módulo de gestión de usuarios
+│   ├── cvcreator/        # Lógica central de creación (CVs, cartas, plantillas)
+│   │   ├── cvs/
+│   │   ├── cover-letters/
+│   │   └── templates/
+│   ├── subscriptions/    # Módulo de gestión de suscripciones
+│   ├── payments/         # Módulo de gestión de pagos (integración Tefpay)
+│   ├── guards/           # Guards de autenticación y autorización
+│   ├── prisma/           # Módulo y servicio de Prisma
+│   └── ...               # Otros módulos y servicios
+├── test/                 # Tests E2E y de integración
+├── .env.example          # Ejemplo de archivo de variables de entorno
+├── nest-cli.json         # Configuración de NestJS CLI
+├── package.json          # Dependencias y scripts del proyecto
+└── tsconfig.json         # Configuración de TypeScript
 ```
 
-## Compile and run the project
+## Documentación de la API
 
-```bash
-# development
-$ pnpm run start
+Una vez que la aplicación está en ejecución en modo desarrollo, la documentación de la API generada por Swagger suele estar disponible en `http://localhost:3000/api` (o la ruta que se haya configurado en `main.ts`).
 
-# watch mode
-$ pnpm run start:dev
+Para una documentación más detallada y conceptual, consulta la carpeta `/docs` en este repositorio.
 
-# production mode
-$ pnpm run start:prod
-```
+## Contribuciones
 
-## Run tests
+Las contribuciones son bienvenidas. Por favor, sigue las guías de estilo de código y asegúrate de que los tests pasen antes de enviar un Pull Request.
 
-```bash
-# unit tests
-$ pnpm run test
+## Licencia
 
-# e2e tests
-$ pnpm run test:e2e
-
-# test coverage
-$ pnpm run test:cov
-```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+(Especificar licencia si aplica, ej. MIT, ISC)

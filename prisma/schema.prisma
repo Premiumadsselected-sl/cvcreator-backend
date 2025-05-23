@@ -57,24 +57,28 @@ model Image {
 }
 
 model Subscription {
-  id                   String    @id @default(cuid())
-  user_id              String    @unique @db.VarChar(100)
-  plan_id              String    @db.VarChar(100) // Referencia a un modelo Plan si tienes diferentes tipos de planes
-  status               String    @default("pending") @db.VarChar(50) // active, inactive, cancelled, past_due, trialing
-  trial_start          DateTime?
-  trial_end            DateTime?
-  current_period_start DateTime?
-  current_period_end   DateTime?
-  cancel_at_period_end Boolean?  @default(false)
-  cancelled_at         DateTime?
-  ended_at             DateTime? // Cuando la suscripción termina definitivamente
-  metadata             Json?     @default("{}")
+  id                    String    @id @default(cuid())
+  user_id               String    @unique @db.VarChar(100)
+  plan_id               String    @db.VarChar(100) // Referencia a un modelo Plan si tienes diferentes tipos de planes
+  status                String    @default("pending") @db.VarChar(50) // active, inactive, cancelled, past_due, trialing
+  trial_start           DateTime?
+  trial_end             DateTime?
+  current_period_start  DateTime?
+  current_period_end    DateTime?
+  cancel_at_period_end  Boolean?  @default(false)
+  cancelled_at          DateTime?
+  ended_at              DateTime? // Cuando la suscripción termina definitivamente
+  tefpay_transaction_id String?   @db.VarChar(255) // ID de transacción de Tefpay para la suscripción
+  metadata              Json?     @default("{}")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   user User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
   plan Plan? @relation(fields: [plan_id], references: [id]) // Opcional, si tienes un modelo Plan
+
+  Payment            Payment[]
+  TefPayNotification TefPayNotification[]
 }
 
 model Plan {
@@ -110,12 +114,14 @@ model Payment {
   refund_reason        String?   @db.Text
   paid_at              DateTime?
   refunded_at          DateTime?
+  metadata             Json?     @default("{}") // AÑADIDO
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user User @relation(fields: [user_id], references: [id], onDelete: NoAction) // NoAction para mantener historial de pagos si el usuario se elimina
-  // subscription Subscription? @relation(fields: [subscription_id], references: [id]) // Descomentar si se usa subscription_id
+  user               User                 @relation(fields: [user_id], references: [id], onDelete: NoAction) // NoAction para mantener historial de pagos si el usuario se elimina
+  subscription       Subscription?        @relation(fields: [subscription_id], references: [id]) // Descomentar si se usa subscription_id
+  TefPayNotification TefPayNotification[]
 }
 
 model TefPayNotification {
@@ -139,6 +145,15 @@ model TefPayNotification {
   status                      String  @default("received") @db.VarChar(50) // received, processed, error
   processing_notes            String? @db.Text
 
+  // Campos añadidos para notificaciones de suscripción
+  ds_Merchant_Subscription_Account String? @db.VarChar(100)
+  ds_Merchant_Subscription_Action  String? @db.VarChar(10) // e.g., C, S, O
+
+  payment_id      String?       @db.VarChar(100)
+  subscription_id String?       @db.VarChar(100)
+  payment         Payment?      @relation(fields: [payment_id], references: [id], onDelete: SetNull) // Relación opcional
+  subscription    Subscription? @relation(fields: [subscription_id], references: [id], onDelete: SetNull) // Relación opcional
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -156,7 +171,7 @@ model EmailLog {
   type                String    @db.VarChar(50) // welcome, password_reset, cv_shared, etc.
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now())
 }
 
 // --- Modelos específicos para CV Creator ---
@@ -179,9 +194,9 @@ model Cv {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime? @map("deleted_at")
 
-  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  // template    Template? @relation(fields: [template_id], references: [id]) // Si tienes un modelo Template
-  // sections    CvSection[] // Si decides normalizar las secciones
+  user     User        @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  template Template?   @relation(fields: [template_id], references: [id]) // Si tienes un modelo Template
+  sections CvSection[] // Si decides normalizar las secciones
 }
 
 model CoverLetter {
@@ -200,8 +215,8 @@ model CoverLetter {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime? @map("deleted_at")
 
-  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  // template    Template? @relation(fields: [template_id], references: [id])
+  user     User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  template Template? @relation(fields: [template_id], references: [id])
 }
 
 model Template {
@@ -216,10 +231,25 @@ model Template {
   usage_count       Int     @default(0)
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+  deletedAt DateTime? // Nuevo campo para soft delete
+
+  cvs          Cv[]
+  coverLetters CoverLetter[]
+}
+
+// Modelo para almacenar secciones de CVs (opcional)
+model CvSection {
+  id         String @id @default(cuid())
+  cv_id      String @db.VarChar(100)
+  section_id String @db.VarChar(100) // ID de la sección (puede ser un modelo separado)
+  order      Int    @default(0) // Orden de la sección en el CV
+  content    Json // Contenido específico de la sección
+
+  createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // cvs           Cv[]
-  // coverLetters  CoverLetter[]
+  cv Cv @relation(fields: [cv_id], references: [id], onDelete: Cascade)
 }
 
 // Modelo para tokens de API (si se ofrece acceso programático)

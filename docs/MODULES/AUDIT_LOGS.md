@@ -1,0 +1,3 @@
+# Gestión de Registros de Auditoría (AuditLogsModule)
+
+Próximamente...

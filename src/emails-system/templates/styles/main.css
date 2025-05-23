@@ -1,0 +1,83 @@
+/* Contenido de la variable 'styles' del ejemplo proporcionado por el usuario */
+.body {
+  width: 100%;
+  height: 100%;
+  -webkit-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
+  padding: 0;
+  margin: 0;
+}
+.es-wrapper-color {
+  background-color: #ffffff;
+}
+.es-wrapper {
+  mso-table-lspace: 0pt;
+  mso-table-rspace: 0pt;
+  border-collapse: collapse;
+  border-spacing: 0px;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  background-repeat: repeat;
+  background-position: center top;
+}
+.es-header {
+  mso-table-lspace: 0pt;
+  mso-table-rspace: 0pt;
+  border-collapse: collapse;
+  border-spacing: 0px;
+  width: 100%;
+  table-layout: fixed !important;
+  background-color: transparent;
+  background-repeat: repeat;
+  background-position: center top;
+}
+.es-header-body {
+  mso-table-lspace: 0pt;
+  mso-table-rspace: 0pt;
+  border-collapse: collapse;
+  border-spacing: 0px;
+  background-color: #ffffff;
+  width: 600px;
+}
+/* ... (aquí deberían ir el resto de los estilos que estaban en la variable 'styles' original) ... */
+/* Placeholder para el resto de los estilos. 
+   Si tienes el contenido completo de la variable 'styles' original, 
+   reemplaza este comentario y el anterior con esos estilos.
+   Por ahora, mantendré los estilos de ejemplo que ya estaban si no se proporciona más.
+*/
+.container {
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+  background-color: #ffffff;
+  padding: 20px;
+}
+.header {
+  text-align: center;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #dddddd;
+}
+.header img {
+  max-width: 150px;
+}
+.content {
+  padding: 20px 0;
+}
+.footer {
+  text-align: center;
+  padding-top: 20px;
+  border-top: 1px solid #dddddd;
+  font-size: 12px;
+  color: #777777;
+}
+.button {
+  display: inline-block;
+  background-color: #7e22ce;
+  color: #ffffff;
+  padding: 10px 20px;
+  text-decoration: none;
+  border-radius: 5px;
+  font-weight: bold;
+}
