@@ -61,7 +61,8 @@ describe("SubscriptionsController (e2e)", () => {
     await prisma.plan.deleteMany({});
 
     // Create a test admin user and get token
-    const adminUserData: RegisterUserDto = { // Changed from CreateUserDto to RegisterUserDto
+    const adminUserData: RegisterUserDto = {
+      // Changed from CreateUserDto to RegisterUserDto
       email: "admin.sub@example.com",
       password: "password123",
       username: "adminsub", // Changed from user_name to username
@@ -87,7 +88,8 @@ describe("SubscriptionsController (e2e)", () => {
     adminToken = adminLoginResponse.body.access_token;
 
     // Create a test regular user and get token
-    const userData: RegisterUserDto = { // Changed from CreateUserDto to RegisterUserDto
+    const userData: RegisterUserDto = {
+      // Changed from CreateUserDto to RegisterUserDto
       email: "user.sub@example.com",
       password: "password123",
       username: "testsubuser", // Changed from user_name to username
@@ -179,7 +181,7 @@ describe("SubscriptionsController (e2e)", () => {
       expect(auditLog.action).toEqual(AuditAction.SUBSCRIPTION_CREATED);
       expect(auditLog.target_type).toEqual("Subscription");
       // expect(auditLog.user_id).toEqual(testUser.id); // Ya filtrado en la query
-      expect(JSON.parse(auditLog.details as string)).toEqual({
+      expect(auditLog.details).toEqual({
         createSubscriptionDto,
       });
     });
@@ -251,7 +253,7 @@ describe("SubscriptionsController (e2e)", () => {
       const auditLog = auditLogs[0];
       expect(auditLog.target_type).toEqual("Subscription");
       // expect(auditLog.user_id).toEqual(testUser.id); // Ya filtrado
-      const parsedDetails = JSON.parse(auditLog.details as string);
+      const parsedDetails = auditLog.details as any;
       expect(parsedDetails.updateSubscriptionDto.status).toEqual(
         updateSubscriptionDto.status
       );
@@ -298,7 +300,7 @@ describe("SubscriptionsController (e2e)", () => {
       const auditLog = auditLogs[0];
       expect(auditLog.target_type).toEqual("Subscription");
       // expect(auditLog.user_id).toEqual(testUser.id); // Ya filtrado
-      expect(JSON.parse(auditLog.details as string)).toEqual({
+      expect(auditLog.details).toEqual({
         id: createdSub.id,
       });
     });

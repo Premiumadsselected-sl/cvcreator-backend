@@ -90,7 +90,7 @@ export class AuthService {
       };
 
       if (calculatedUserName) {
-        createUserPayload.user_name = calculatedUserName;
+        createUserPayload.user_name = calculatedUserName; // Corregido de username a user_name
       }
 
       if (Object.keys(userDataPayload).length > 0) {
