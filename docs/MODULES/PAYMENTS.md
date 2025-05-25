@@ -167,9 +167,136 @@ Para añadir soporte para un nuevo procesador de pago (ej. "Stripe"), sigue esto
 - `GET /api/payments`: Lista los pagos (con filtros apropiados y paginación).
 - `GET /api/payments/:id`: Obtiene un pago específico.
 - `PATCH /api/payments/:id`: Actualiza un pago.
-- `POST /api/tefpay/notify`: Endpoint para recibir notificaciones de Tefpay (webhooks).
+- `POST /api/payments/tefpay/notifications`: Endpoint para recibir notificaciones de Tefpay (webhooks).
 
 ## Flujo de Pago Típico
+
+El siguiente diagrama ilustra el flujo completo de pagos y suscripciones, incluyendo la recepción de notificaciones S2S:
+
+```mermaid
+---
+config:
+  look: handDrawn
+---
+sequenceDiagram
+    autonumber
+    actor Usuario
+    participant Frontend
+    participant PaymentsController
+    participant PaymentsService
+    participant TefpayService
+    participant SubscriptionsService
+    participant TefpayNotificationsService
+    participant AuditLogsService
+    participant PrismaService
+    participant Tefpay
+    Usuario->>Frontend: Iniciar Pago (selecciona Plan)
+    Frontend->>PaymentsController: POST /payments/payment-flow (plan_id, user_id, return_url)
+    PaymentsController->>PaymentsService: initiatePayment(dto, userId)
+    PaymentsService->>PrismaService: findFirst(Payment {user_id, status: PENDING})
+    PrismaService-->>PaymentsService: existingPendingPayment
+    alt Pago PENDIENTE Existente
+        PaymentsService-->>PaymentsController: ConflictException("Ya tiene un pago pendiente")
+        PaymentsController-->>Frontend: HTTP 409
+        Frontend-->>Usuario: Error: "Pago pendiente existente"
+    else Sin Pago PENDIENTE
+        PaymentsService->>SubscriptionsService: findActiveSubscriptionByUserId(userId)
+        SubscriptionsService-->>PaymentsService: activeSubscription
+        alt Suscripción ACTIVA/TRIALING Existente
+            PaymentsService-->>PaymentsController: ConflictException("Ya tiene una suscripción activa")
+            PaymentsController-->>Frontend: HTTP 409
+            Frontend-->>Usuario: Error: "Suscripción activa existente"
+        else Sin Suscripción Activa
+            PaymentsService->>PrismaService: findUnique(Plan {plan_id})
+            PrismaService-->>PaymentsService: planDetails
+            PaymentsService->>PrismaService: create(Payment {status: PENDING})
+            PrismaService-->>PaymentsService: newPaymentRecord
+            PaymentsService->>TefpayService: createTefpayRedirectFormParams(details)
+            TefpayService-->>PaymentsService: tefpayParams (url, fields)
+            PaymentsService->>AuditLogsService: create(AuditLog PAYMENT_INITIATED)
+            AuditLogsService-->>PaymentsService: auditLogEntry
+            PaymentsService-->>PaymentsController: InitiatePaymentResponseDto (payment_id, redirect_url, tefpay_form_inputs)
+            PaymentsController-->>Frontend: HTTP 201 (InitiatePaymentResponseDto)
+            Frontend-->>Usuario: Redirigir a tefpayParams.url con tefpayParams.fields
+        end
+    end
+    Usuario->>Tefpay: Completa el pago en TPV
+    Tefpay-->>Usuario: Resultado (redirige a return_url/cancel_url)
+    Tefpay->>PaymentsController: POST /api/payments/tefpay/notifications
+    note right of PaymentsController: Webhook para notificaciones S2S
+    PaymentsController->>TefpayNotificationsService: storeRawNotification(payload)
+    TefpayNotificationsService->>PrismaService: create(TefPayNotification {raw_notification, status: RECEIVED})
+    PrismaService-->>TefpayNotificationsService: storedNotification
+    TefpayNotificationsService->>PaymentsService: Event "tefpay.notification.processed_by_handler" (storedNotification)
+    PaymentsService->>PaymentsService: handleTefpayNotificationEvent(storedNotification)
+    PaymentsService->>TefpayService: verifyS2SSignature(rawPayload, signature)
+    alt Firma Inválida
+        TefpayService-->>PaymentsService: false
+        PaymentsService->>TefpayNotificationsService: updateNotificationProcessingStatus(SIGNATURE_FAILED)
+        PaymentsService->>AuditLogsService: update(AuditLog {error: "Signature failed"})
+    else Firma Válida
+        TefpayService-->>PaymentsService: true
+        PaymentsService->>PrismaService: findUnique(Payment {matching_data})
+        PrismaService-->>PaymentsService: paymentRecord
+        alt Payment Record No Encontrado
+            PaymentsService->>TefpayNotificationsService: updateNotificationProcessingStatus(ERROR, "Payment record not found")
+            PaymentsService->>AuditLogsService: update(AuditLog {error: "Payment record not found"})
+        else Payment Record Encontrado
+            PaymentsService->>AuditLogsService: create(AuditLog PAYMENT_NOTIFICATION_RECEIVED)
+            PaymentsService->>PaymentsService: mapTefpayNotificationToEventType(rawPayload)
+            PaymentsService-->>PaymentsService: tefpayEventType
+            alt Con Ds_Merchant_Subscription_Account (Suscripción)
+                PaymentsService->>PaymentsService: processSubscriptionLifecycleEvent(simulatedEvent)
+                loop Por cada tipo de evento
+                    PaymentsService->>SubscriptionsService: findByProcessorSubscriptionId(tefpaySubscriptionAccount)
+                    SubscriptionsService-->>PaymentsService: subscription
+                    alt invoice.payment_succeeded (Renovación Exitosa)
+                        PaymentsService->>PrismaService: create(Payment {status: COMPLETED, for_renewal})
+                        PrismaService-->>PaymentsService: renewalPayment
+                        PaymentsService->>PrismaService: update(Subscription {status: ACTIVE, new_period_end})
+                        PaymentsService->>AuditLogsService: update(AuditLog {status: "ProcessedRenewalSuccess"})
+                        PaymentsService->>TefpayNotificationsService: updateNotificationProcessingStatus(PROCESSED, payment_id, subscription_id)
+                    else invoice.payment_failed (Renovación Fallida)
+                        PaymentsService->>PrismaService: create(Payment {status: FAILED, for_renewal_attempt})
+                        PrismaService-->>PaymentsService: failedPayment
+                        PaymentsService->>PrismaService: update(Subscription {status: PAST_DUE})
+                        PaymentsService->>AuditLogsService: update(AuditLog {status: "ProcessedRenewalFailure"})
+                        PaymentsService->>TefpayNotificationsService: updateNotificationProcessingStatus(PROCESSED, payment_id, subscription_id)
+                        note right of PaymentsService: TODO: Implementar lógica de dunning
+                    else customer.subscription.deleted (Cancelación)
+                        PaymentsService->>PrismaService: update(Subscription {status: CANCELLED, ended_at})
+                        PaymentsService->>AuditLogsService: update(AuditLog {status: "ProcessedSubscriptionDeleted"})
+                        PaymentsService->>TefpayNotificationsService: updateNotificationProcessingStatus(PROCESSED, subscription_id)
+                    else Otros eventos (created, updated)
+                        PaymentsService->>PrismaService: update/create(Subscription)
+                        PaymentsService->>AuditLogsService: update(AuditLog {status: "ProcessedSubscriptionEvent"})
+                        PaymentsService->>TefpayNotificationsService: updateNotificationProcessingStatus(PROCESSED, subscription_id)
+                    end
+                end
+            else Sin Ds_Merchant_Subscription_Account (Pago Inicial)
+                PaymentsService->>PaymentsService: processInitialPaymentEvent(rawPayload, paymentRecord)
+                alt Pago Exitoso (Ds_Code < 100)
+                    PaymentsService->>PrismaService: update(Payment {status: COMPLETED})
+                    alt Plan con billing_interval (Suscripción)
+                        PaymentsService->>SubscriptionsService: createFromPayment(details)
+                        SubscriptionsService-->>PaymentsService: newSubscription
+                        PaymentsService->>PrismaService: update(Payment {subscription_id})
+                        PaymentsService->>AuditLogsService: update(AuditLog {status: "ProcessedSuccessfully", subscription_created_id})
+                        PaymentsService->>TefpayNotificationsService: updateNotificationProcessingStatus(PROCESSED, payment_id, subscription_id)
+                    else Pago Único
+                        PaymentsService->>AuditLogsService: update(AuditLog {status: "ProcessedSuccessNonSubscription"})
+                        PaymentsService->>TefpayNotificationsService: updateNotificationProcessingStatus(PROCESSED, payment_id)
+                    end
+                else Pago Fallido (Ds_Code >= 100)
+                    PaymentsService->>PrismaService: update(Payment {status: FAILED})
+                    PaymentsService->>AuditLogsService: update(AuditLog {status: "ProcessedWithFailure"})
+                    PaymentsService->>TefpayNotificationsService: updateNotificationProcessingStatus(ERROR, payment_id, "Payment failed")
+                end
+            end
+        end
+    end
+    note over Frontend, SubscriptionsService: Flujos de cancelación manual y renovación automática no están implementados en el código revisado, pero se asumen como futuros desarrollos.
+```
 
 1.  El frontend solicita iniciar un pago para un plan específico (`POST /api/payments/payment-flow`).
 2.  `PaymentsService` utiliza el `IPaymentProcessor` inyectado para llamar a `preparePaymentParameters`.
