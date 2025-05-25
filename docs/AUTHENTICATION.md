@@ -72,10 +72,10 @@ Este guarda restringe el acceso a ciertas rutas solo a usuarios que tienen el ro
   4.  Si no es "admin", lanza una `ForbiddenException` (403).
 - **Uso:** Se aplica a controladores o rutas específicas que gestionan funcionalidades administrativas.
   `typescript
-    @UseGuards(AuthGuard, AdminGuard)
-    @Controller('admin-only-routes')
-    export class AdminController { /* ... */ }
-    `
+  @UseGuards(AuthGuard, AdminGuard)
+  @Controller('admin-only-routes')
+  export class AdminController { /* ... */ }
+  `
   Ubicación: `src/guards/admin.guard.ts`
 
 ### 2.3. `SubscriptionGuard`
@@ -86,13 +86,13 @@ Este guarda verifica si el usuario autenticado tiene una suscripción activa o e
   1.  Asegura que `AuthGuard` se haya ejecutado primero.
   2.  Utiliza el `user.sub` (ID de usuario) del token para consultar el `SubscriptionsService`.
   3.  El `SubscriptionsService` (a través de un método como `validateSubscription`) verifica el estado de la suscripción del usuario en la base de datos.
-  4.  Si el usuario no tiene una suscripción válida (ej. no existe, está "cancelled", "expired", "pending" si no se permite), lanza una `ForbiddenException` (403).
+  4.  Si el usuario no tiene una suscripción válida (ej. no existe, está "canceled", "expired", "pending" si no se permite), lanza una `ForbiddenException` (403).
 - **Uso:** Se aplica a rutas que ofrecen funcionalidades premium o contenido restringido a suscriptores.
   `typescript
-    @UseGuards(AuthGuard, SubscriptionGuard)
-    @Get('premium-feature')
-    getPremiumFeature() { /* ... */ }
-    `
+  @UseGuards(AuthGuard, SubscriptionGuard)
+  @Get('premium-feature')
+  getPremiumFeature() { /* ... */ }
+  `
   Ubicación: `src/guards/subscription.guard.ts`
 
 ### 2.4. Decorador `GetUser` (Placeholder/Implementación Futura)

@@ -210,7 +210,7 @@ export class AuthSubscriptionDto {
   plan: SubscriptionPlanType;
 
   @ApiPropertyOptional({
-    description: "Subscription status (e.g., active, inactive, cancelled).",
+    description: "Subscription status (e.g., active, inactive, canceled).",
     example: "active",
   })
   @IsString()
@@ -223,7 +223,7 @@ export class AuthSubscriptionDto {
 
 - `userId` (string, obligatorio): ID del usuario (UUID) al que pertenece la suscripción.
 - `plan` (`SubscriptionPlanType`, obligatorio): Tipo de plan de suscripción (ej. `free`, `basic`, `premium`).
-- `status` (string, opcional): Estado de la suscripción (ej. `active`, `inactive`, `cancelled`). Se sugiere usar un enum para este campo en el futuro.
+- `status` (string, opcional): Estado de la suscripción (ej. `active`, `inactive`, `canceled`). Se sugiere usar un enum para este campo en el futuro.
 
 ## Endpoints de la API (Próximamente)
 

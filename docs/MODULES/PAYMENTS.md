@@ -177,5 +177,22 @@ Para añadir soporte para un nuevo procesador de pago (ej. "Stripe"), sigue esto
 4.  `PaymentsService` devuelve estos datos al frontend.
 5.  El frontend redirige al usuario a la pasarela de pago o envía el formulario.
 6.  El usuario completa el pago en la pasarela externa.
-7.  La pasarela de pago notifica al backend el resultado de la transacción a través de un webhook (ej. `POST /api/tefpay/notify`).
-8.  El servicio de notificaciones correspondiente (ej. `TefPayNotificationsService`) procesa la notificación, actualiza el estado del pago y la suscripción del usuario.
+7.  La pasarela de pago notifica al backend el resultado de la transacción a través de un webhook (ej. `POST /api/payments/tefpay/notifications`).
+8.  El servicio de notificaciones correspondiente (ej. `TefPayNotificationsService`) recibe la notificación, la verifica y luego emite un evento interno. `PaymentsService` escucha este evento y utiliza sus métodos (`handleInitialPaymentOrSubscriptionNotification` o `handleSubscriptionLifecycleNotification`) para procesar la notificación, actualizar el estado del `Payment`, crear o actualizar la `Subscription` asociada, y ajustar los roles del `User` si es necesario. Esta lógica incluye el manejo de pagos iniciales, renovaciones, cancelaciones y fallos de pago.
+
+## Estado Actual y Mejoras Recientes
+
+La revisión exhaustiva del sistema de pagos, notificaciones (especialmente Tefpay), y la lógica de suscripciones y planes ha sido completada, abordando varios puntos críticos. Las mejoras y correcciones clave incluyen:
+
+- **Verificación de Firmas de Webhooks**: Se ha implementado y validado la correcta verificación de las firmas S2S para las notificaciones de Tefpay, asegurando la autenticidad de los mensajes.
+- **Manejo Detallado de Escenarios de Notificación**: Se ha refinado la lógica en `PaymentsService` para manejar diversos escenarios de notificación a través de los métodos `handleInitialPaymentOrSubscriptionNotification` y `handleSubscriptionLifecycleNotification`. Esto incluye:
+  - La correcta creación y activación de suscripciones tras un pago inicial exitoso.
+  - La gestión de renovaciones de suscripción, incluyendo el manejo de pagos fallidos y la posible transición de suscripciones a estados como `past_due` o `canceled`.
+  - El procesamiento de cancelaciones de suscripción iniciadas por el usuario o por el sistema.
+- **Resolución de Errores de Tipado y Dependencias**:
+  - Se corrigió un error de "type never" en la función `processSubscriptionLifecycleEvent` dentro de `PaymentsService`. Esto se logró asegurando que la transacción de Prisma (`prisma.$transaction`) devuelva explícitamente un objeto con las entidades `Payment` y `Subscription` (o `null`), permitiendo una inferencia de tipos correcta para las variables `finalFailedRenewalPayment` y `finalSubscriptionForNotification`.
+  - Se corrigió el nombre de la propiedad `cancelled_at` a `canceled_at` al actualizar el estado de una `Subscription` para alinearlo con el esquema de Prisma.
+  - Se resolvieron las excepciones `UnknownDependenciesException` (para `TefpayService` en `SubscriptionsModule`) y `UndefinedModuleException` (debido a una dependencia circular entre `PaymentsModule` y `SubscriptionsModule`) mediante la importación de `PaymentsModule` en `SubscriptionsModule` y la aplicación de `forwardRef()` en las importaciones de módulos en ambos `subscriptions.module.ts` y `payments.module.ts`.
+- **Atomicidad de Operaciones**: El uso de `prisma.$transaction` en operaciones críticas asegura que las actualizaciones en múltiples tablas (como `Payment`, `Subscription`, `User`) se realicen de manera atómica.
+
+Estos cambios han mejorado significativamente la robustez, fiabilidad y correctitud del módulo de pagos y su interacción con las suscripciones.

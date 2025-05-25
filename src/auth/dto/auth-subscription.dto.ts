@@ -33,7 +33,7 @@ export class AuthSubscriptionDto {
 
   @ApiPropertyOptional({
     description:
-      "Estado de la suscripción (p. ej., active, inactive, cancelled).",
+      "Estado de la suscripción (p. ej., active, inactive, canceled).",
     example: "active",
   })
   @IsString()

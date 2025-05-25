@@ -1,17 +1,50 @@
-import { Injectable } from "@nestjs/common"; // NotFoundException eliminada si no se usa
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Logger,
+} from "@nestjs/common"; // NotFoundException eliminada si no se usa // MODIFICADO: Añadido NotFoundException, BadRequestException, Logger
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateSubscriptionDto } from "./dto/create-subscription.dto";
 import { UpdateSubscriptionDto } from "./dto/update-subscription.dto";
-import { Subscription, Prisma } from "@prisma/client";
-import { SubscriptionStatus, SubscriptionDto } from "./dto/subscription.dto"; // SubscriptionDto importado aquí
+// MODIFICADO: Importar SubscriptionStatus directamente de @prisma/client
+import {
+  Subscription,
+  Prisma,
+  SubscriptionStatus as PrismaSubscriptionStatus,
+} from "@prisma/client";
+import {
+  SubscriptionDto,
+  SubscriptionStatus as DtoSubscriptionStatus,
+} from "./dto/subscription.dto"; // Renombrar el enum del DTO para evitar colisión
 import { AuditLogsService } from "../audit-logs/audit-logs.service"; // Importar AuditLogsService
 import { AuditAction } from "../audit-logs/dto/audit-action.enum"; // Importar AuditAction
+import { TefpayService } from "../payments/tefpay/tefpay.service"; // AÑADIDO
+
+// ADDED: Define a type for the createFromPayment method arguments
+interface CreateSubscriptionFromPaymentParams {
+  user_id: string;
+  plan_id: string;
+  status: PrismaSubscriptionStatus; // MODIFICADO: Usar PrismaSubscriptionStatus
+  tefpay_transaction_id?: string | null;
+  tefpay_subscription_account?: string | null;
+  payment_id: string;
+  trial_start?: Date | null;
+  trial_end?: Date | null;
+  current_period_start: Date;
+  current_period_end?: Date | null;
+  metadata?: Prisma.InputJsonObject;
+  tx?: Prisma.TransactionClient;
+}
 
 @Injectable()
 export class SubscriptionsService {
+  private readonly logger = new Logger(SubscriptionsService.name); // AÑADIDO
+
   constructor(
     private readonly prisma: PrismaService,
-    private readonly auditLogsService: AuditLogsService // Inyectar AuditLogsService
+    private readonly auditLogsService: AuditLogsService, // Inyectar AuditLogsService
+    private readonly tefpayService: TefpayService // AÑADIDO: Inyectar TefpayService (o un PaymentProcessorResolver)
   ) {}
 
   async create(
@@ -26,7 +59,7 @@ export class SubscriptionsService {
       ...restInput, // 'restInput' ya no contiene payment_id
       user: { connect: { id: user_id } },
       plan: { connect: { id: plan_id } },
-      status: SubscriptionStatus.PENDING,
+      status: PrismaSubscriptionStatus.PENDING, // MODIFICADO: Usar PrismaSubscriptionStatus directamente
     };
     const subscription = await prismaClient.subscription.create({ data });
 
@@ -42,18 +75,111 @@ export class SubscriptionsService {
     return subscription;
   }
 
+  // ADDED: New method to create a subscription from a payment
+  async createFromPayment(
+    params: CreateSubscriptionFromPaymentParams,
+    tx?: Prisma.TransactionClient // Added tx parameter here as well
+  ): Promise<Subscription> {
+    const prismaClient = params.tx || tx || this.prisma; // Use tx from params if available, then from method, then default
+    const {
+      user_id,
+      plan_id,
+      status,
+      tefpay_transaction_id,
+      tefpay_subscription_account,
+      payment_id, // Assuming payment_id is for logging/metadata, not a direct relation to Payment model for this creation path
+      trial_start,
+      trial_end,
+      current_period_start,
+      current_period_end,
+      metadata,
+    } = params;
+
+    const data: Prisma.SubscriptionCreateInput = {
+      user: { connect: { id: user_id } },
+      plan: { connect: { id: plan_id } },
+      status: status, // MODIFICADO: 'status' ya es de tipo PrismaSubscriptionStatus desde la interfaz
+      tefpay_transaction_id: tefpay_transaction_id,
+      tefpay_subscription_account: tefpay_subscription_account,
+      // payment_id is not directly on the Subscription model in the same way as user_id/plan_id
+      // It can be stored in metadata if needed, or handled via the Payment model's subscription_id relation
+      trial_start,
+      trial_end,
+      current_period_start,
+      current_period_end,
+      metadata: metadata || {
+        source: "payment_creation",
+        payment_id: payment_id,
+      },
+    };
+
+    const subscription = await prismaClient.subscription.create({ data });
+
+    await this.auditLogsService.create({
+      user_id,
+      action: AuditAction.SUBSCRIPTION_CREATED,
+      target_type: "Subscription",
+      target_id: subscription.id,
+      details: JSON.stringify({
+        plan_id,
+        status,
+        payment_id,
+        tefpay_transaction_id,
+        tefpay_subscription_account,
+        source: "createFromPayment",
+      }),
+    });
+
+    return subscription;
+  }
+
+  async findByProcessorSubscriptionId(
+    processorSubscriptionId: string,
+    tx?: Prisma.TransactionClient,
+    include?: Prisma.SubscriptionInclude // Añadido parámetro include
+  ): Promise<(Subscription & { plan?: any }) | null> {
+    // Tipo de retorno ajustado
+    const prismaClient = tx || this.prisma;
+    return prismaClient.subscription.findUnique({
+      where: { tefpay_subscription_account: processorSubscriptionId },
+      include: include, // Usar el parámetro include
+    });
+  }
+
+  async findActiveSubscriptionByUserId(
+    userId: string,
+    tx?: Prisma.TransactionClient
+  ): Promise<Subscription | null> {
+    const prismaClient = tx || this.prisma;
+    return prismaClient.subscription.findFirst({
+      where: {
+        user_id: userId,
+        status: {
+          in: [
+            PrismaSubscriptionStatus.ACTIVE,
+            PrismaSubscriptionStatus.TRIALING,
+          ],
+        },
+      },
+      // orderBy: { created_at: "desc" } // Eliminado orderBy para evitar el error
+    });
+  }
+
   // ... (otros métodos existentes: findAll, findOne, update, remove, updateStatus, etc.)
-  async findAll(): Promise<Subscription[]> {
-    return this.prisma.subscription.findMany();
+  async findAll(include?: Prisma.SubscriptionInclude): Promise<Subscription[]> {
+    return this.prisma.subscription.findMany({ include });
   }
 
   async findOne(
     id: string,
-    tx?: Prisma.TransactionClient
-  ): Promise<Subscription | null> {
+    tx?: Prisma.TransactionClient,
+    include?: Prisma.SubscriptionInclude // Añadido parámetro include
+  ): Promise<(Subscription & { plan?: any }) | null> {
+    // Tipo de retorno ajustado
     const prismaClient = tx || this.prisma;
     const subscription = await prismaClient.subscription.findUnique({
       where: { id },
+      include: include, // Usar el parámetro include
     });
     return subscription;
   }
@@ -67,7 +193,10 @@ export class SubscriptionsService {
     const { metadata, status, ...rest } = updateSubscriptionDto;
     const data: Prisma.SubscriptionUpdateInput = {
       ...rest,
-      status: status ? (status as string) : undefined,
+      // MODIFICADO: Mapear DtoSubscriptionStatus a PrismaSubscriptionStatus si es necesario, o asegurar que el DTO use PrismaSubscriptionStatus
+      status: status
+        ? (status as unknown as PrismaSubscriptionStatus)
+        : undefined,
       metadata: metadata ? (metadata as Prisma.InputJsonValue) : undefined,
     };
 
@@ -112,14 +241,14 @@ export class SubscriptionsService {
 
   async updateStatus(
     subscriptionId: string,
-    status: SubscriptionStatus,
+    status: PrismaSubscriptionStatus, // MODIFICADO: Usar PrismaSubscriptionStatus
     updateData?: Partial<Prisma.SubscriptionUncheckedUpdateInput>,
     tx?: Prisma.TransactionClient,
     userId?: string // userId añadido opcionalmente para logging
   ): Promise<Subscription | null> {
     const prismaClient = tx || this.prisma;
     const dataToUpdate: Prisma.SubscriptionUpdateInput = {
-      status: status as string,
+      status: status, // MODIFICADO: 'status' ya es de tipo PrismaSubscriptionStatus
     };
 
     if (updateData) {
@@ -130,19 +259,21 @@ export class SubscriptionsService {
       });
     }
 
-    if (status === SubscriptionStatus.ACTIVE) {
+    if (status === PrismaSubscriptionStatus.ACTIVE) {
+      // MODIFICADO
       if (
         dataToUpdate.current_period_start === undefined &&
         !(updateData && updateData.current_period_start)
       ) {
         dataToUpdate.current_period_start = new Date();
       }
-    } else if (status === SubscriptionStatus.CANCELLED) {
+    } else if (status === PrismaSubscriptionStatus.CANCELLED) {
+      // MODIFICADO
       if (
-        dataToUpdate.cancelled_at === undefined &&
-        !(updateData && updateData.cancelled_at)
+        dataToUpdate.canceled_at === undefined &&
+        !(updateData && updateData.canceled_at)
       ) {
-        dataToUpdate.cancelled_at = new Date();
+        dataToUpdate.canceled_at = new Date();
       }
       if (
         dataToUpdate.ended_at === undefined &&
@@ -152,7 +283,8 @@ export class SubscriptionsService {
       ) {
         dataToUpdate.ended_at = new Date();
       }
-    } else if (status === SubscriptionStatus.INACTIVE) {
+    } else if (status === PrismaSubscriptionStatus.INACTIVE) {
+      // MODIFICADO
       if (
         dataToUpdate.ended_at === undefined &&
         !(updateData && updateData.ended_at)
@@ -240,8 +372,8 @@ export class SubscriptionsService {
     }
 
     const isActiveStatus =
-      subscription.status === (SubscriptionStatus.ACTIVE as string) ||
-      subscription.status === (SubscriptionStatus.TRIALING as string);
+      subscription.status === PrismaSubscriptionStatus.ACTIVE || // MODIFICADO
+      subscription.status === PrismaSubscriptionStatus.TRIALING; // MODIFICADO
 
     const isWithinPeriod =
       !subscription.current_period_end ||
@@ -259,7 +391,11 @@ export class SubscriptionsService {
       where: {
         user_id: userId,
         status: {
-          in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING],
+          // MODIFICADO: Usar PrismaSubscriptionStatus directamente
+          in: [
+            PrismaSubscriptionStatus.ACTIVE,
+            PrismaSubscriptionStatus.TRIALING,
+          ],
         },
         OR: [
           { current_period_end: null },
@@ -283,14 +419,14 @@ export class SubscriptionsService {
       id: sub.id,
       user_id: sub.user_id,
       plan_id: sub.plan_id,
-      status: sub.status as SubscriptionStatus, // El DTO espera SubscriptionStatus
+      status: sub.status as DtoSubscriptionStatus, // Castear a DtoSubscriptionStatus para el DTO
       // Manejo de campos de fecha que pueden ser null en Prisma y Date | undefined en DTO
       trial_start: sub.trial_start ?? undefined,
       trial_end: sub.trial_end ?? undefined,
       current_period_start: sub.current_period_start ?? undefined,
       current_period_end: sub.current_period_end ?? undefined,
       cancel_at_period_end: sub.cancel_at_period_end ?? undefined,
-      cancelled_at: sub.cancelled_at ?? undefined,
+      canceled_at: sub.canceled_at ?? undefined, // Corregido a canceled_at para coincidir con Prisma
       ended_at: sub.ended_at ?? undefined,
       createdAt: sub.createdAt,
       updatedAt: sub.updatedAt,
@@ -302,4 +438,114 @@ export class SubscriptionsService {
 
   // Eliminar cualquier otra función findByUserId duplicada o renombrarla si tiene un propósito diferente.
   // Por ejemplo, si existía una que devolvía una sola Subscription y no un DTO.
+
+  /**
+   * Handles a user's request to cancel their active subscription.
+   * The cancellation will be effective at the end of the current billing period.
+   *
+   * @param userId The ID of the user requesting the cancellation.
+   * @param subscriptionId The ID of the subscription to cancel.
+   * @param cancellationReason Optional reason for cancellation provided by the user.
+   * @returns The updated subscription entity.
+   * @throws NotFoundException if the subscription doesn't exist.
+   * @throws BadRequestException if the subscription doesn't belong to the user,
+   *         or if it's not in a cancellable state (e.g., already cancelled, ended, pending).
+   */
+  async requestUserSubscriptionCancellation(
+    userId: string,
+    subscriptionId: string,
+    cancellationReason?: string
+  ): Promise<Subscription> {
+    this.logger.log(
+      `User ${userId} requesting cancellation for subscription ${subscriptionId}. Reason: ${cancellationReason || "N/A"}`
+    );
+
+    const subscription = await this.prisma.subscription.findUnique({
+      where: { id: subscriptionId },
+    });
+
+    if (!subscription) {
+      throw new NotFoundException(
+        `Subscription with ID ${subscriptionId} not found.`
+      );
+    }
+
+    if (subscription.user_id !== userId) {
+      throw new BadRequestException(
+        "Subscription does not belong to the authenticated user."
+      );
+    }
+
+    // Check if the subscription is in a state that allows cancellation
+    const cancellableStatuses: PrismaSubscriptionStatus[] = [
+      PrismaSubscriptionStatus.ACTIVE,
+      PrismaSubscriptionStatus.TRIALING,
+      PrismaSubscriptionStatus.PAST_DUE,
+    ];
+    if (!cancellableStatuses.includes(subscription.status)) {
+      // Eliminado el casteo innecesario
+      throw new BadRequestException(
+        `Subscription is already in status '${subscription.status}' and cannot be cancelled.`
+      );
+    }
+
+    if (!subscription.current_period_end) {
+      this.logger.error(
+        `Subscription ${subscriptionId} is missing 'current_period_end' and cannot be scheduled for cancellation at period end.`
+      );
+      throw new BadRequestException(
+        "Cannot determine cancellation date due to missing current period end."
+      );
+    }
+
+    // Call the payment processor to inform about the cancellation if needed.
+    // For Tefpay, this might be a formality or a specific API call if they manage recurring tokens.
+    const processorResponse =
+      await this.tefpayService.requestSubscriptionCancellation({
+        subscriptionId: subscription.id, // Use our internal ID
+        // processorSubscriptionId: subscription.tefpay_subscription_account, // Pass if TefpayService needs it
+        cancellationReason,
+      });
+
+    if (!processorResponse.success) {
+      this.logger.error(
+        `Payment processor failed to acknowledge cancellation for subscription ${subscriptionId}: ${processorResponse.message}`
+      );
+      throw new BadRequestException(
+        `Could not process cancellation with payment provider: ${processorResponse.message}`
+      );
+    }
+
+    const cancelAtDate = new Date(subscription.current_period_end);
+
+    const updatedSubscription = await this.prisma.subscription.update({
+      where: { id: subscriptionId },
+      data: {
+        status: PrismaSubscriptionStatus.PENDING_CANCELLATION, // MODIFICADO
+        requested_cancellation_at: new Date(),
+        cancel_at: cancelAtDate,
+        cancel_at_period_end: true,
+        // Keep current_period_end as is, it signifies when the service access ends.
+        // ended_at will be set by the cron job when cancel_at is reached.
+      },
+    });
+
+    await this.auditLogsService.create({
+      user_id: userId,
+      action: AuditAction.SUBSCRIPTION_CANCELLATION_REQUESTED,
+      target_type: "Subscription",
+      target_id: updatedSubscription.id,
+      details: JSON.stringify({
+        subscriptionId,
+        cancellationReason,
+        cancelAtDate: cancelAtDate.toISOString(),
+      }),
+    });
+
+    this.logger.log(
+      `Subscription ${subscriptionId} for user ${userId} has been set to 'pending_cancellation', effective on ${cancelAtDate.toISOString()}.`
+    );
+
+    return updatedSubscription;
+  }
 }

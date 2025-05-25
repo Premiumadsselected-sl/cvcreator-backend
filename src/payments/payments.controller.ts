@@ -1,26 +1,18 @@
 import {
   Controller,
-  Get,
   Post,
   Body,
-  Patch,
-  Param,
-  Delete,
   HttpCode,
   HttpStatus,
   UseGuards,
 } from "@nestjs/common";
 import { PaymentsService } from "./payments.service";
-import { CreatePaymentDto } from "./dto/create-payment.dto";
-import { UpdatePaymentDto } from "./dto/update-payment.dto";
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
-  ApiParam,
   ApiBearerAuth,
 } from "@nestjs/swagger";
-import { PaymentDto } from "./dto/payment.dto";
 import { InitiatePaymentDto } from "./dto/initiate-payment.dto";
 import { InitiatePaymentResponseDto } from "./dto/initiate-payment-response.dto";
 import { JwtAuthGuard } from "../guards/jwt-auth.guard";
@@ -32,7 +24,7 @@ import { User } from "../users/entities/user.entity";
 export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}
 
-  @Post("payment-flow") // Changed from "payment-flow" to "create-intent"
+  @Post("payment-flow")
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: "Initiate a new payment flow for a plan" })
@@ -57,41 +49,21 @@ export class PaymentsController {
     @Body() initiatePaymentDto: InitiatePaymentDto,
     @GetUser() user: User
   ): Promise<InitiatePaymentResponseDto> {
-    // Pasar user.id (string) en lugar del objeto User completo
-    return this.paymentsService.initiatePaymentFlow(
-      initiatePaymentDto,
-      user.id
-    );
+    return this.paymentsService.initiatePayment(initiatePaymentDto, user.id);
   }
 
-  @Post("tefpay/notifications") // Added this new endpoint
-  @ApiOperation({ summary: "Handle Tefpay payment notifications" })
-  @ApiResponse({
-    status: 200,
-    description: "Notification received and processed.",
-  })
-  @ApiResponse({
-    status: 400,
-    description: "Bad Request (e.g., invalid payload)",
-  })
-  @HttpCode(HttpStatus.OK) // Tefpay expects a 200 OK
-  async handleTefpayNotification(@Body() notificationPayload: any) {
-    // It's good practice to validate the payload here
-    // For now, we'll assume the service handles the logic including validation
-    return this.paymentsService.handleTefpayNotification(notificationPayload);
-  }
-
+  /* // Commenting out CRUD methods as they are not implemented in PaymentsService
   @Post()
   @ApiOperation({ summary: "Create a new payment" })
   @ApiResponse({
     status: 201,
     description: "The payment has been successfully created.",
-    type: PaymentDto,
+    // type: PaymentDto,
   })
   @ApiResponse({ status: 400, description: "Bad Request." })
   @HttpCode(HttpStatus.CREATED)
-  create(@Body() createPaymentDto: CreatePaymentDto) {
-    return this.paymentsService.create(createPaymentDto);
+  create(@Body() createPaymentDto: any) { // Changed CreatePaymentDto to any to avoid import
+    // return this.paymentsService.create(createPaymentDto);
   }
 
   @Get()
@@ -99,61 +71,58 @@ export class PaymentsController {
   @ApiResponse({
     status: 200,
     description: "A list of payments.",
-    type: [PaymentDto],
+    // type: [PaymentDto],
   })
   findAll() {
-    return this.paymentsService.findAll();
+    // return this.paymentsService.findAll();
   }
 
   @Get(":id")
   @ApiOperation({ summary: "Retrieve a payment by ID" })
-  @ApiParam({
-    name: "id",
-    description: "Payment ID",
-    type: "string",
-    format: "uuid",
-  })
+  // @ApiParam({
+  //   name: "id",
+  //   description: "Payment ID",
+  //   type: "string",
+  //   format: "uuid",
+  // })
   @ApiResponse({
     status: 200,
     description: "The payment details.",
-    type: PaymentDto,
+    // type: PaymentDto,
   })
   @ApiResponse({ status: 404, description: "Payment not found." })
   findOne(@Param("id") id: string) {
-    // Removed ParseUUIDPipe
-    return this.paymentsService.findOne(id);
+    // return this.paymentsService.findOne(id);
   }
 
   @Patch(":id")
   @ApiOperation({ summary: "Update a payment by ID" })
-  @ApiParam({
-    name: "id",
-    description: "Payment ID",
-    type: "string",
-    // format: "uuid", // No longer a UUID
-  })
+  // @ApiParam({
+  //   name: "id",
+  //   description: "Payment ID",
+  //   type: "string",
+  // })
   @ApiResponse({
     status: 200,
     description: "The payment has been successfully updated.",
-    type: PaymentDto,
+    // type: PaymentDto,
   })
   @ApiResponse({ status: 404, description: "Payment not found." })
   @ApiResponse({ status: 400, description: "Bad Request." })
   update(
-    @Param("id") id: string, // Removed ParseUUIDPipe
-    @Body() updatePaymentDto: UpdatePaymentDto
+    @Param("id") id: string, 
+    @Body() updatePaymentDto: any // Changed UpdatePaymentDto to any to avoid import
   ) {
-    return this.paymentsService.update(id, updatePaymentDto);
+    // return this.paymentsService.update(id, updatePaymentDto);
   }
 
   @Delete(":id")
   @ApiOperation({ summary: "Delete a payment by ID" })
-  @ApiParam({
-    name: "id",
-    description: "Payment ID",
-    type: "string",
-    // format: "uuid", // No longer a UUID
-  })
+  // @ApiParam({
+  //   name: "id",
+  //   description: "Payment ID",
+  //   type: "string",
+  // })
   @ApiResponse({
     status: 204,
     description: "The payment has been successfully deleted.",
@@ -161,7 +130,7 @@ export class PaymentsController {
   @ApiResponse({ status: 404, description: "Payment not found." })
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param("id") id: string) {
-    // Removed ParseUUIDPipe
-    return this.paymentsService.remove(id);
+    // return this.paymentsService.remove(id);
   }
+  */
 }

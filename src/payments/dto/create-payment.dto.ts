@@ -32,10 +32,12 @@ export class CreatePaymentDto extends OmitType(PaymentDto, [
   @IsOptional()
   plan_id?: string;
 
-  @ApiPropertyOptional({ description: "Order ID for the payment" })
+  @ApiPropertyOptional({
+    description: "Payment matching data for tefpay",
+  })
   @IsString()
   @IsOptional()
-  order_id?: string;
+  tefpay_matching_data?: string;
 
   @ApiPropertyOptional({
     description: "Payment ID from the processor, if known",

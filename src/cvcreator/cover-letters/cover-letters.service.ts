@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  ForbiddenException,
-} from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service"; // Ajusta la ruta según tu estructura
 import { CreateCoverLetterDto } from "./dto/create-cover-letter.dto"; // Asumiremos que crearás este DTO
 import { UpdateCoverLetterDto } from "./dto/update-cover-letter.dto"; // Asumiremos que crearás este DTO

@@ -5,7 +5,7 @@ import { AppModule } from "../../src/app.module";
 import { PrismaService } from "../../src/prisma/prisma.service";
 import { RegisterUserDto } from "../../src/auth/dto/register-user.dto"; // Changed from CreateUserDto to RegisterUserDto
 import { User, PrismaClient } from "@prisma/client";
-import { CreatePlanDto } from "../../src/plans/dto/create-plan.dto";
+import { CreatePlanDto } from "../../src/payments/plans/dto/create-plan.dto"; // CORREGIDA LA RUTA
 import { Plan } from "@prisma/client";
 import { CreateSubscriptionDto } from "../../src/subscriptions/dto/create-subscription.dto";
 import { UpdateSubscriptionDto } from "../../src/subscriptions/dto/update-subscription.dto";
@@ -111,25 +111,27 @@ describe("SubscriptionsController (e2e)", () => {
     const planData: CreatePlanDto = {
       name: "Test Plan For Subscriptions",
       price: 29.99,
+      currency: "EUR", // AÑADIDO
+      billing_interval: "month", // AÑADIDO
       features: ["Feature A", "Feature B"],
       // stripe_price_id: "price_test_sub_e2e", // Comentado o eliminado si no se usa directamente en el modelo Plan
-      stripe_plan_id: "plan_test_sub_e2e", // Usar el campo correcto del schema.prisma
+      // stripe_plan_id: "plan_test_sub_e2e", // ELIMINADO: No existe en el modelo Plan
     };
 
     testPlan = await prisma.plan.create({
       data: {
         name: planData.name,
         price: planData.price,
+        currency: planData.currency,
+        billing_interval: planData.billing_interval,
         features: planData.features,
         active: true,
-        billing_interval: "MONTHLY", // Añadir valor por defecto si es necesario
-        currency: "EUR", // Añadir valor por defecto si es necesario
-        stripe_plan_id: planData.stripe_plan_id, // Asegurar que este campo se usa
+        // stripe_plan_id: planData.stripe_plan_id, // ELIMINADO: No existe en el modelo Plan
       },
     });
 
     expect(testPlan).toBeDefined();
-    expect(testPlan.stripe_plan_id).toEqual("plan_test_sub_e2e");
+    // expect(testPlan.stripe_plan_id).toEqual("plan_test_sub_e2e"); // ELIMINADO: No existe en el modelo Plan
   });
 
   afterAll(async () => {
@@ -268,7 +270,7 @@ describe("SubscriptionsController (e2e)", () => {
   });
 
   describe("DELETE /subscriptions/:id", () => {
-    it("should delete a subscription (mark as cancelled) and create an audit log", async () => {
+    it("should delete a subscription (mark as canceled) and create an audit log", async () => {
       const createdSub = await prisma.subscription.create({
         data: {
           user_id: testUser.id,
@@ -292,7 +294,7 @@ describe("SubscriptionsController (e2e)", () => {
       const auditLogs = await prisma.auditLog.findMany({
         where: {
           target_id: createdSub.id,
-          action: AuditAction.SUBSCRIPTION_CANCELLED,
+          action: AuditAction.SUBSCRIPTION_CANCELED,
           user_id: testUser.id, // Asegurar user_id
         },
       });

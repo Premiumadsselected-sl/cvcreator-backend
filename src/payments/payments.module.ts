@@ -1,10 +1,9 @@
-import { Module } from "@nestjs/common";
+import { Module, forwardRef } from "@nestjs/common";
 import { HttpModule } from "@nestjs/axios";
 import { PaymentsController } from "./payments.controller";
 import { PaymentsService } from "./payments.service";
 import { PrismaModule } from "../prisma/prisma.module";
-import { TefPayNotificationsController } from "./tefpay/notifications/notifications.controller";
-import { TefPayNotificationsService } from "./tefpay/notifications/notifications.service";
+import { TefpayNotificationsService } from "./tefpay/notifications/notifications.service";
 import { TefpayService } from "./tefpay/tefpay.service";
 import { SubscriptionsModule } from "../subscriptions/subscriptions.module";
 import { UsersModule } from "../users/users.module";
@@ -12,18 +11,20 @@ import { PlansModule } from "./plans/plans.module";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { PAYMENT_PROCESSOR_TOKEN } from "./payment-processor.token";
 import { AuditLogsModule } from "../audit-logs/audit-logs.module";
+import { NotificationsModule } from "./tefpay/notifications/notifications.module";
 
 @Module({
   imports: [
     PrismaModule,
     HttpModule,
-    SubscriptionsModule,
+    forwardRef(() => SubscriptionsModule),
     UsersModule,
     PlansModule,
     ConfigModule,
     AuditLogsModule,
+    forwardRef(() => NotificationsModule), // Usar forwardRef aquí
   ],
-  controllers: [PaymentsController, TefPayNotificationsController],
+  controllers: [PaymentsController],
   providers: [
     TefpayService,
     {
@@ -52,7 +53,7 @@ import { AuditLogsModule } from "../audit-logs/audit-logs.module";
       inject: [ConfigService, TefpayService],
     },
     PaymentsService,
-    TefPayNotificationsService,
+    TefpayNotificationsService,
   ],
   exports: [PaymentsService, TefpayService, PAYMENT_PROCESSOR_TOKEN],
 })

@@ -24,7 +24,6 @@ export enum TefpayTransactionType {
   // Other types mentioned in documentation
   TOTALS_QUERY = "210", // Consulta de totales
   RECURRING_PAYMENT_STRIPE = "25", // Cobro recurrente con Stripe
-  PREAUTHORIZATION_AVS_ZERO_AMOUNT = "33", // Preautorización Validación AVS importe cero (same as AVS_VALIDATION)
   NO_ACS_AUTHENTICATION_PAYMENT = "227", // Cobro sin autenticación ACS
 }
 

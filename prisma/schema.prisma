@@ -40,6 +40,16 @@ model User {
   apiTokens     ApiToken[]
 }
 
+enum SubscriptionStatus {
+  ACTIVE
+  INACTIVE
+  CANCELLED
+  PAST_DUE
+  TRIALING
+  PENDING_CANCELLATION // Añadido para el estado de cancelación pendiente
+  PENDING // Estado inicial o pendiente de pago
+}
+
 model Image {
   id         String  @id @default(cuid())
   user_id    String  @db.VarChar(100)
@@ -60,15 +70,18 @@ model Subscription {
   id                    String    @id @default(cuid())
   user_id               String    @unique @db.VarChar(100)
   plan_id               String    @db.VarChar(100) // Referencia a un modelo Plan si tienes diferentes tipos de planes
-  status                String    @default("pending") @db.VarChar(50) // active, inactive, cancelled, past_due, trialing
+  status                SubscriptionStatus @default(PENDING) // Cambiado a enum y PENDING como default
   trial_start           DateTime?
   trial_end             DateTime?
   current_period_start  DateTime?
   current_period_end    DateTime?
   cancel_at_period_end  Boolean?  @default(false)
-  cancelled_at          DateTime?
+  requested_cancellation_at DateTime? // NUEVO: Cuándo el usuario solicitó la cancelación
+  cancel_at             DateTime? // NUEVO: Fecha efectiva de cancelación (fin del periodo de gracia)
+  canceled_at          DateTime?
   ended_at              DateTime? // Cuando la suscripción termina definitivamente
   tefpay_transaction_id String?   @db.VarChar(255) // ID de transacción de Tefpay para la suscripción
+  tefpay_subscription_account String? @unique @db.VarChar(255) // NUEVO: ID de suscripción de Tefpay
   metadata              Json?     @default("{}")
 
   createdAt DateTime @default(now())
@@ -81,17 +94,25 @@ model Subscription {
   TefPayNotification TefPayNotification[]
 }
 
+enum PlanType {
+  TRIAL_PLAN
+  NORMAL_PLAN
+  PREMIUM_PLAN
+  ENTERPRISE_PLAN
+}
+
 model Plan {
   id               String  @id @default(cuid())
   name             String  @unique @db.VarChar(100)
+  type             PlanType @default(TRIAL_PLAN)
   description      String? @db.Text
-  price            Float // Precio mensual/anual
+  price            Float // Precio mensual/anual/por dia o horas
   currency         String  @default("EUR") @db.VarChar(10)
   billing_interval String  @default("month") @db.VarChar(20) // month, year
+  trial_days       Int?    // ADDED: Duration of the trial in days
   features         Json?   @default("[]") // Lista de características del plan
   active           Boolean @default(true)
-  stripe_plan_id   String? @unique @db.VarChar(100) // ID del plan en Stripe u otro procesador
-
+  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -108,6 +129,10 @@ model Payment {
   method               String?   @db.VarChar(50) // card, paypal, etc.
   processor            String    @db.VarChar(50) // tefpay, stripe, etc.
   processor_payment_id String?   @unique @db.VarChar(255) // ID del pago en el procesador
+  tefpay_transaction_id String?   @db.VarChar(255) // ID de transacción de Tefpay para el PAGO
+  matching_data        String?   @unique @db.VarChar(255) // RENOMBRADO: Antes tefpay_matching_data
+  signature            String?   @db.VarChar(255) // RENOMBRADO: Antes tefpay_frontend_signature
+  payment_method_details Json?    @default("{}") // AÑADIDO: Detalles del método de pago (ej. datos de tarjeta)
   processor_response   Json?     @default("{}")
   error_message        String?   @db.Text
   refunded_amount      Float?    @default(0)
@@ -117,17 +142,28 @@ model Payment {
   metadata             Json?     @default("{}") // AÑADIDO
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now())
 
   user               User                 @relation(fields: [user_id], references: [id], onDelete: NoAction) // NoAction para mantener historial de pagos si el usuario se elimina
   subscription       Subscription?        @relation(fields: [subscription_id], references: [id]) // Descomentar si se usa subscription_id
   TefPayNotification TefPayNotification[]
 }
 
+enum TefPayNotificationStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  PROCESSED_UNHANDLED // For events that are processed but not specifically handled by a case
+  ERROR
+  SIGNATURE_FAILED
+  SIGNATURE_MISSING // New status
+}
+
 model TefPayNotification {
   id                          String  @id @default(cuid())
   ds_Order                    String? @db.VarChar(100) // Importante para identificar la transacción
   ds_Code                     String? @db.VarChar(10) // Código de resultado de la operación
+  ds_Message                  String? @db.Text // Mensaje de la operación, añadido para firma
   ds_Merchant_MatchingData    String? @db.Text
   ds_Date                     String? @db.VarChar(20)
   ds_Hour                     String? @db.VarChar(20)
@@ -142,12 +178,17 @@ model TefPayNotification {
   ds_Currency                 String? @db.VarChar(10)
   ds_Signature                String? @db.VarChar(255) // Firma para validar la notificación
   raw_notification            Json    @default("{}")
-  status                      String  @default("received") @db.VarChar(50) // received, processed, error
+  status                      TefPayNotificationStatus  @default(RECEIVED) // Changed to use the enum
   processing_notes            String? @db.Text
+  processed_at                DateTime? @updatedAt // Added to track when the notification processing status is updated
 
-  // Campos añadidos para notificaciones de suscripción
+  // Campos añadidos para notificaciones de suscripción y otros datos
   ds_Merchant_Subscription_Account String? @db.VarChar(100)
-  ds_Merchant_Subscription_Action  String? @db.VarChar(10) // e.g., C, S, O
+  ds_Merchant_Subscription_Action  String? @db.VarChar(10) // e.g., C, S, O, D
+  ds_Merchant_Url                  String? @db.Text // URL a la que Tefpay envió la notificación
+  ds_CodeBank                      String? @db.VarChar(50) // Código de error detallado del banco
+  ds_TransactionDate               String? @db.VarChar(20) // Fecha de la transacción/notificación de Tefpay (si es diferente de ds_Date)
+  ds_ClientRef                     String? @db.VarChar(100) // Referencia del cliente si se envió
 
   payment_id      String?       @db.VarChar(100)
   subscription_id String?       @db.VarChar(100)
@@ -155,7 +196,7 @@ model TefPayNotification {
   subscription    Subscription? @relation(fields: [subscription_id], references: [id], onDelete: SetNull) // Relación opcional
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now())
 }
 
 model EmailLog {
@@ -212,7 +253,7 @@ model CoverLetter {
   version     Int     @default(1)
 
   createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  updatedAt DateTime  @default(now())
   deletedAt DateTime? @map("deleted_at")
 
   user     User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
@@ -263,7 +304,7 @@ model ApiToken {
   expires_at   DateTime?
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now())
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 }

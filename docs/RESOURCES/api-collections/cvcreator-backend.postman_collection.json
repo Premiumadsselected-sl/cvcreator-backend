@@ -706,7 +706,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"plan_id\": \"plan_cuid_example\"\n}"
+              "raw": "{\n  \"plan_id\": \"plan_cuid_example\",\n  \"payment_code\": \"PAYMENT_CODE_EXAMPLE\",\n  \"email\": \"user@example.com\",\n  \"user_name\": \"John Doe\",\n  \"tefpay_signature\": \"mock_frontend_generated_signature_123\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/payments/payment-flow",
@@ -720,16 +720,111 @@
           "name": "Handle Tefpay Notifications",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
             "body": {
-              "mode": "raw",
-              "raw": "{\n  \"Ds_Order\": \"payment_id_example\",\n  \"Ds_Signature\": \"tefpay_signature_value\",\n  \"Ds_Response\": \"0000\"\n  // ... other Tefpay notification fields\n}"
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Ds_SignatureVersion",
+                  "value": "HMAC_SHA256_V1",
+                  "type": "text",
+                  "description": "Opcional. Usado para la verificación de firma S2S. Ejemplo: HMAC_SHA256_V1. Desmarcar/deshabilitar si no se envía.",
+                  "disabled": true
+                },
+                {
+                  "key": "Ds_Code",
+                  "value": "0000",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Date",
+                  "value": "YYYYMMDD",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Hour",
+                  "value": "HHMMSS",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Order",
+                  "value": "your_payment_id_or_order_reference",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Currency",
+                  "value": "978",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Terminal",
+                  "value": "1",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Card_Country",
+                  "value": "724",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_MerchantCode",
+                  "value": "your_tefpay_merchant_code",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_SecurePayment",
+                  "value": "1",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_TransactionType",
+                  "value": "0",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_AuthorisationCode",
+                  "value": "auth_code_if_successful",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_ProcessedPayMethod",
+                  "value": "56",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Merchant_MatchingData",
+                  "value": "YOUR_UNIQUE_PAYMENT_CODE_HERE",
+                  "type": "text",
+                  "description": "Corresponde al 'payment_code' enviado durante la iniciación del pago. Usado para encontrar el registro de pago."
+                },
+                {
+                  "key": "Ds_Merchant_TransactionID",
+                  "value": "tefpay_transaction_id_example_12345",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Merchant_Subscription_Account",
+                  "value": "",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Signature",
+                  "value": "actual_tefpay_signature_received",
+                  "type": "text"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/payments/tefpay/notifications",
               "host": ["{{baseUrl}}"],
               "path": ["api", "payments", "tefpay", "notifications"]
-            }
+            },
+            "description": "Maneja las notificaciones entrantes de Tefpay (tanto S2S como no S2S). \\n\\nPara pruebas NO S2S (flujo actual):\\n- `Ds_SignatureVersion` puede omitirse (deshabilitado por defecto en esta solicitud).\\n- `Ds_Signature` debe estar presente (puede ser un valor dummy si la verificación está omitida en el backend).\\n- `Ds_Merchant_MatchingData` es CRUCIAL y debe contener el `payment_code` usado al iniciar el pago.\\n\\nPara pruebas S2S (cuando la verificación de firma esté activa):\\n- `Ds_SignatureVersion` debe habilitarse y tener el valor correcto (ej. HMAC_SHA256_V1).\\n- `Ds_Signature` debe ser la firma válida calculada por Tefpay.\\n- Otros parámetros (`DS_ORDER`, `DS_RESPONSE`, etc.) deben ser los enviados por Tefpay."
           },
           "response": []
         },
@@ -911,7 +1006,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"status\": \"cancelled\",\n  \"cancel_at_period_end\": true\n}"
+              "raw": "{\n \"status\": \"canceled\",\"canceled_at\": \"2025-12-31T23:59:59.000Z\",\"cancel_at_period_end\": false}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/subscriptions/:id",

@@ -173,4 +173,8 @@ Los campos de tipo `Json` (como `content` en `Cv` y `CoverLetter`, o `structure`
 - **Validación:** La validación de la estructura interna de estos campos JSON debe ser manejada a nivel de aplicación (ej. usando DTOs y `class-validator` antes de guardar los datos).
 - **Consultas:** Consultar datos dentro de campos JSON puede ser menos eficiente y más complejo que consultar campos relacionales estándar. Prisma ofrece algunas capacidades para filtrar por campos JSON, pero deben usarse con consideración.
 
+## Nota sobre Revisión Pendiente
+
+**Importante**: Existe una revisión pendiente exhaustiva del sistema de pagos, notificaciones (especialmente Tefpay), y la lógica de suscripciones y planes. Consultar el `CHANGE_LOG-2025-05-24.md` para más detalles sobre los puntos específicos que requieren atención y validación para asegurar la robustez y correcto funcionamiento del sistema de monetización.
+
 Esta descripción general debería proporcionar una buena comprensión del esquema de la base de datos. Para detalles más precisos, siempre consulta el archivo `prisma/schema.prisma`.

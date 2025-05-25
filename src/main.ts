@@ -8,6 +8,8 @@ import { Express } from "express";
 import basicAuth from "express-basic-auth";
 import * as dotenv from "dotenv";
 import { ConfigService } from "@nestjs/config";
+import { GlobalHttpExceptionFilter } from "./common/filters/http-exception.filter"; // Importar el filtro global
+import { HttpAdapterHost } from "@nestjs/core"; // Importar HttpAdapterHost
 
 // Cargar variables de entorno.
 dotenv.config();
@@ -18,6 +20,10 @@ async function bootstrap(): Promise<Express> {
   const server = express();
   const app = await NestFactory.create(AppModule, new ExpressAdapter(server));
   const configService = app.get(ConfigService);
+
+  // Aplicar el filtro global de excepciones HTTP
+  const httpAdapter = app.get(HttpAdapterHost); // Obtener HttpAdapterHost
+  app.useGlobalFilters(new GlobalHttpExceptionFilter(httpAdapter)); // Pasar httpAdapter al constructor
 
   const globalPrefix = configService.get<string>("API_GLOBAL_PREFIX", "api");
   app.setGlobalPrefix(globalPrefix);
@@ -156,6 +162,10 @@ async function runLocal() {
 
   const localApp = await NestFactory.create(AppModule);
   const configService = localApp.get(ConfigService);
+
+  // Aplicar el filtro global de excepciones HTTP también para runLocal
+  const httpAdapter = localApp.get(HttpAdapterHost); // Obtener HttpAdapterHost para localApp
+  localApp.useGlobalFilters(new GlobalHttpExceptionFilter(httpAdapter)); // Aplicar el filtro
 
   const globalPrefix = configService.get<string>("API_GLOBAL_PREFIX", "api");
   localApp.setGlobalPrefix(globalPrefix);

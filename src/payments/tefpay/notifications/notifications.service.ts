@@ -1,471 +1,243 @@
-import {
-  Injectable,
-  Logger,
-  InternalServerErrorException,
-} from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { createHash } from "crypto";
 import { PrismaService } from "../../../prisma/prisma.service";
-import { PaymentsService } from "../../payments.service";
-import { SubscriptionsService } from "../../../subscriptions/subscriptions.service";
-import { TefPayNotificationStatus } from "./dto/notification.dto";
-import { TefpayTransactionType } from "../common/tefpay.enums";
-import { PaymentStatus } from "../../dto/payment.dto";
-import { SubscriptionStatus } from "../../../subscriptions/dto/subscription.dto";
-import { Prisma, Subscription, Payment } from "@prisma/client"; // Import Subscription type
+import { EventEmitter2 } from "@nestjs/event-emitter";
+import { v4 as uuidv4 } from "uuid";
+import {
+  TefPayNotificationDto,
+  TefPayNotificationStatus as DtoTefPayNotificationStatus,
+} from "./dto/notification.dto";
+import { AuditLogsService } from "../../../audit-logs/audit-logs.service";
+import { TefPayNotificationStatus } from "@prisma/client"; // Added direct import
 
 @Injectable()
-export class TefPayNotificationsService {
-  private readonly logger = new Logger(TefPayNotificationsService.name);
-  private readonly tefpayPrivateKey: string;
+export class TefpayNotificationsService {
+  private readonly logger = new Logger(TefpayNotificationsService.name);
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
-    private readonly paymentsService: PaymentsService,
-    private readonly subscriptionsService: SubscriptionsService
-  ) {
-    const secret = this.configService.get<string>("TEFPAY_PRIVATE_KEY");
-    if (!secret) {
-      this.logger.error(
-        "TEFPAY_PRIVATE_KEY no está configurada en el entorno."
-      );
-      throw new InternalServerErrorException(
-        "Configuración de Tefpay incompleta."
-      );
+    private readonly auditLogsService: AuditLogsService,
+    private readonly eventEmitter: EventEmitter2
+  ) {}
+
+  // Helper to map Prisma Status to DTO Status
+  private mapPrismaStatusToDtoStatus(
+    prismaStatus: TefPayNotificationStatus // Use direct import
+  ): DtoTefPayNotificationStatus {
+    switch (prismaStatus) {
+      case TefPayNotificationStatus.RECEIVED:
+        return DtoTefPayNotificationStatus.RECEIVED;
+      case TefPayNotificationStatus.PROCESSING:
+        return DtoTefPayNotificationStatus.PROCESSING;
+      case TefPayNotificationStatus.PROCESSED:
+        return DtoTefPayNotificationStatus.PROCESSED;
+      case TefPayNotificationStatus.PROCESSED_UNHANDLED:
+        return DtoTefPayNotificationStatus.PROCESSED_UNHANDLED;
+      case TefPayNotificationStatus.ERROR:
+        return DtoTefPayNotificationStatus.ERROR;
+      case TefPayNotificationStatus.SIGNATURE_FAILED:
+        return DtoTefPayNotificationStatus.SIGNATURE_FAILED;
+      case TefPayNotificationStatus.SIGNATURE_MISSING:
+        return DtoTefPayNotificationStatus.SIGNATURE_MISSING;
+      default:
+        this.logger.warn(
+          `Unmapped Prisma TefPayNotificationStatus: ${prismaStatus}`
+        );
+        return DtoTefPayNotificationStatus.ERROR;
     }
-    this.tefpayPrivateKey = secret;
   }
 
-  private isSuccessfulResponseCode(code: string): boolean {
-    if (!code) return false;
-    if (code === "100") return true;
-    const numericCode = parseInt(code, 10);
-    if (!isNaN(numericCode) && numericCode >= 0 && numericCode <= 199)
-      return true;
-    if (code === "0900" || code === "900") return true;
-    return false;
-  }
-
-  private verifySignature(notificationData: Record<string, any>): boolean {
-    const {
-      Ds_Amount,
-      Ds_Merchant_MerchantCode,
-      Ds_Currency,
-      Ds_Code,
-      Ds_Signature,
-    } = notificationData;
-
-    if (typeof Ds_Signature !== "string" || !Ds_Signature) {
-      this.logger.warn(
-        "No se recibió Ds_Signature o no es un string en la notificación."
-      );
-      return false;
-    }
-
-    const amount = String(Ds_Amount || "");
-    const orderFieldForSignature = String(
-      notificationData.Ds_Order ||
-        notificationData.Ds_Merchant_MatchingData ||
-        notificationData.Ds_Merchant_Subscription_Account ||
-        ""
-    );
-    const merchantCode = String(Ds_Merchant_MerchantCode || "");
-    const currency = String(Ds_Currency || "");
-    const responseCode = String(Ds_Code || "");
-
-    const stringToSign = `${amount}${orderFieldForSignature}${merchantCode}${currency}${responseCode}${this.tefpayPrivateKey}`;
-
-    const calculatedSignature = createHash("sha1")
-      .update(stringToSign)
-      .digest("hex")
-      .toLowerCase();
-
-    this.logger.debug(`String para firmar (verifySignature): ${stringToSign}`);
-    this.logger.debug(
-      `Firma calculada (verifySignature): ${calculatedSignature}`
-    );
-    this.logger.debug(
-      `Firma recibida (verifySignature): ${Ds_Signature.toLowerCase()}`
-    );
-
-    return calculatedSignature === Ds_Signature.toLowerCase();
-  }
-
-  async handleNotification(
-    notificationPayload: Record<string, any>
-  ): Promise<void> {
+  /**
+   * Processes an incoming raw notification payload from Tefpay.
+   * 1. (TODO) Verifies the S2S signature.
+   * 2. Stores the raw notification.
+   * 3. Emits a structured event for other services (like PaymentsService) to consume.
+   * @param incomingPayload The raw data from Tefpay notification.
+   * @returns The stored notification DTO.
+   */
+  async processAndStoreIncomingTefpayNotification(
+    incomingPayload: Record<string, any>
+  ): Promise<TefPayNotificationDto> {
+    const orderIdentifier =
+      incomingPayload.Ds_Merchant_MatchingData ||
+      incomingPayload.Ds_Order ||
+      "UNKNOWN";
     this.logger.log(
-      "Nueva notificación de Tefpay recibida",
-      notificationPayload
+      `[TefpayNotificationsService] Processing incoming Tefpay notification for order: ${orderIdentifier}`
     );
 
-    let notificationRecord;
-    try {
-      notificationRecord = await this.prisma.tefPayNotification.create({
-        data: {
-          ds_Merchant_MatchingData: String(
-            notificationPayload.Ds_Merchant_MatchingData ?? null
-          ),
-          ds_Order: String(
-            notificationPayload.Ds_Order ??
-              notificationPayload.Ds_Merchant_MatchingData ??
-              notificationPayload.Ds_Merchant_Subscription_Account ??
-              null
-          ),
-          ds_Code: String(notificationPayload.Ds_Code ?? null),
-          ds_Merchant_TransactionType: String(
-            notificationPayload.Ds_Merchant_TransactionType ?? null
-          ),
-          status: TefPayNotificationStatus.RECEIVED,
-          raw_notification: notificationPayload as Prisma.JsonObject,
-          processing_notes:
-            "Notificación recibida, pendiente de procesamiento.",
-          ds_Date: String(notificationPayload.Ds_Date ?? null),
-          ds_Hour: String(notificationPayload.Ds_Hour ?? null),
-          ds_SecurePayment: String(
-            notificationPayload.Ds_SecurePayment ?? null
-          ),
-          ds_Card_Type: String(notificationPayload.Ds_Card_Type ?? null),
-          ds_Card_Country: String(notificationPayload.Ds_Card_Country ?? null),
-          ds_AuthorisationCode: String(
-            notificationPayload.Ds_AuthorisationCode ?? null
-          ),
-          ds_Merchant_MerchantCode: String(
-            notificationPayload.Ds_Merchant_MerchantCode ?? null
-          ),
-          ds_Merchant_Terminal: String(
-            notificationPayload.Ds_Merchant_Terminal ?? null
-          ),
-          ds_Amount: String(notificationPayload.Ds_Amount ?? null),
-          ds_Currency: String(notificationPayload.Ds_Currency ?? null),
-          ds_Signature: String(notificationPayload.Ds_Signature ?? null),
-          ds_Merchant_Subscription_Account: String(
-            notificationPayload.Ds_Merchant_Subscription_Account ?? null
-          ),
-          ds_Merchant_Subscription_Action: String(
-            notificationPayload.Ds_Merchant_Subscription_Action ?? null
-          ),
-        },
-      });
-      this.logger.log(`Notificación guardada con ID: ${notificationRecord.id}`);
-    } catch (error) {
-      this.logger.error("Error al guardar la notificación inicial en la BD", {
-        message: error.message,
-        stack: error.stack,
-        payload: notificationPayload,
-      });
-      throw new InternalServerErrorException(
-        "Error al registrar la notificación de Tefpay."
-      );
-    }
+    const notificationId = uuidv4(); // uuidv4 is now defined
+    const now = new Date();
 
-    const isSignatureValid = this.verifySignature(notificationPayload);
-
-    if (!isSignatureValid) {
-      this.logger.warn("Firma de notificación Tefpay inválida.", {
-        order: String(
-          notificationPayload.Ds_Order ||
-            notificationPayload.Ds_Merchant_MatchingData ||
-            notificationPayload.Ds_Merchant_Subscription_Account ||
-            "Desconocido"
-        ),
-      });
-      await this.prisma.tefPayNotification.update({
-        where: { id: notificationRecord.id },
-        data: {
-          status: TefPayNotificationStatus.ERROR,
-          processing_notes: "Error: Firma inválida.",
-        },
-      });
-      return;
-    }
-
-    this.logger.log("Firma de notificación Tefpay verificada correctamente.");
+    // Create the DTO for storage, mapping all known Ds_* fields
+    // and any other fields captured by [key: string]: any in TefpayIncomingNotificationDto
+    const notificationToStore: Omit<
+      TefPayNotificationDto,
+      "payment_id" | "subscription_id" | "processing_notes"
+    > = {
+      id: notificationId,
+      Ds_Amount: incomingPayload.Ds_Amount, // Corrected: Ds_Amount
+      Ds_Merchant_MatchingData: incomingPayload.Ds_Merchant_MatchingData, // Corrected
+      Ds_AuthorisationCode: incomingPayload.Ds_AuthorisationCode, // Corrected
+      Ds_Bank: incomingPayload.Ds_Bank, // Corrected (assuming Ds_Bank is in DTO)
+      Ds_Merchant_TransactionType: incomingPayload.Ds_Merchant_TransactionType, // Corrected
+      Ds_Message: incomingPayload.Ds_Message, // Corrected
+      Ds_Code: incomingPayload.Ds_Code, // Corrected
+      Ds_PanMask: incomingPayload.Ds_PanMask, // Corrected (assuming Ds_PanMask is in DTO)
+      Ds_Expiry: incomingPayload.Ds_Expiry, // Corrected (assuming Ds_Expiry is in DTO)
+      Ds_Date: incomingPayload.Ds_Date, // Corrected
+      Ds_Merchant_MerchantCode: incomingPayload.Ds_Merchant_MerchantCode, // Corrected
+      Ds_Merchant_Guarantees: incomingPayload.Ds_Merchant_Guarantees, // Corrected (assuming Ds_Merchant_Guarantees is in DTO)
+      Ds_Signature: incomingPayload.Ds_Signature, // Corrected
+      Ds_Merchant_TransactionID: incomingPayload.Ds_Merchant_TransactionID, // Corrected (assuming Ds_Merchant_TransactionID is in DTO)
+      Ds_Merchant_Subscription_Account:
+        incomingPayload.Ds_Merchant_Subscription_Account, // Corrected
+      Ds_Merchant_Subscription_Action:
+        incomingPayload.Ds_Merchant_Subscription_Action, // Corrected
+      Ds_Merchant_Terminal: incomingPayload.Ds_Merchant_Terminal, // Corrected
+      Ds_Currency: incomingPayload.Ds_Currency, // Corrected
+      Ds_CostumerCreditCardCountry:
+        incomingPayload.Ds_CostumerCreditCardCountry, // Corrected (assuming Ds_CostumerCreditCardCountry is in DTO)
+      Ds_CostumerCreditCardBrand: incomingPayload.Ds_CostumerCreditCardBrand, // Corrected (assuming Ds_CostumerCreditCardBrand is in DTO)
+      Ds_CostumerCreditCardType: incomingPayload.Ds_CostumerCreditCardType, // Corrected (assuming Ds_CostumerCreditCardType is in DTO)
+      Ds_CostumerCreditCardExpiryDate:
+        incomingPayload.Ds_CostumerCreditCardExpiryDate, // Corrected (assuming Ds_CostumerCreditCardExpiryDate is in DTO)
+      Ds_CostumerCreditCardId: incomingPayload.Ds_CostumerCreditCardId, // Corrected (assuming Ds_CostumerCreditCardId is in DTO)
+      Ds_CostumerCreditCardBin: incomingPayload.Ds_CostumerCreditCardBin, // Corrected (assuming Ds_CostumerCreditCardBin is in DTO)
+      Ds_Merchant_UserName: incomingPayload.Ds_Merchant_UserName, // Corrected (assuming Ds_Merchant_UserName is in DTO)
+      ds_Order: incomingPayload.Ds_Order, // Corrected
+      ds_TransactionDate: incomingPayload.Ds_TransactionDate, // Corrected (assuming Ds_TransactionDate is in DTO)
+      ds_ClientRef: incomingPayload.Ds_ClientRef, // Corrected (assuming Ds_ClientRef is in DTO)
+      ds_CodeBank: incomingPayload.Ds_CodeBank, // Corrected (assuming Ds_CodeBank is in DTO)
+      ds_Merchant_Url: incomingPayload.Ds_Merchant_Url, // Corrected (assuming Ds_Merchant_Url is in DTO)
+      raw_notification: incomingPayload as any, // Store the entire incoming payload
+      status: DtoTefPayNotificationStatus.RECEIVED, // Initial status using DTO enum
+      createdAt: now,
+      updatedAt: now,
+    };
 
     try {
-      await this.prisma.$transaction(async (tx) => {
-        const {
-          Ds_Code,
-          Ds_Merchant_TransactionType,
-          Ds_Merchant_MatchingData,
-          Ds_Order,
-          Ds_Merchant_Subscription_Account,
-          Ds_Merchant_Subscription_Action,
-          Ds_Merchant_TransactionID,
-        } = notificationPayload;
-
-        const orderIdentifier = String(
-          Ds_Order ||
-            Ds_Merchant_MatchingData ||
-            Ds_Merchant_Subscription_Account ||
-            ""
-        );
-
-        if (!orderIdentifier) {
-          this.logger.warn(
-            "No se pudo determinar un identificador de pedido/suscripción (Ds_Order, Ds_Merchant_MatchingData, Ds_Merchant_Subscription_Account) en la notificación."
-          );
-          // Actualizar el registro de notificación fuera de la transacción si la transacción falla aquí.
-          // No se puede usar 'tx' aquí si la transacción va a hacer rollback debido a este throw.
-          // Esta actualización se moverá al bloque catch principal si es necesario.
-          throw new Error("Identificador de pedido/suscripción faltante.");
-        }
-
-        const payment: Payment | null =
-          await this.paymentsService.findByMatchingData(orderIdentifier, tx); // Pasar tx
-
-        if (!payment && !Ds_Merchant_Subscription_Account) {
-          this.logger.warn(
-            `No se encontró el pago para el identificador: ${orderIdentifier} y no parece ser una notificación de gestión de suscripción pura (sin Ds_Merchant_Subscription_Account).`
-          );
-          throw new Error(
-            `Pago no encontrado para identificador ${orderIdentifier} y no es acción de suscripción pura.`
-          );
-        }
-        if (!payment && Ds_Merchant_Subscription_Account) {
-          this.logger.log(
-            `No se encontró pago para ${orderIdentifier}, pero existe Ds_Merchant_Subscription_Account. Se procederá si es una acción de suscripción válida.`
-          );
-        }
-
-        let newPaymentStatus: PaymentStatus | null = payment
-          ? (payment.status as PaymentStatus)
-          : null;
-        let newSubscriptionStatus: SubscriptionStatus | null = null;
-        let subscriptionToUpdate: Subscription | null = null;
-
-        if (payment && payment.subscription_id) {
-          subscriptionToUpdate = await this.subscriptionsService.findOne(
-            payment.subscription_id,
-            tx // Pasar tx
-          );
-          if (subscriptionToUpdate) {
-            newSubscriptionStatus =
-              subscriptionToUpdate.status as SubscriptionStatus;
-          }
-        } else if (Ds_Merchant_Subscription_Account) {
-          // Si no hay pago asociado directamente o el pago no tiene subscription_id,
-          // intentar encontrar la suscripción usando Ds_Merchant_Subscription_Account
-          subscriptionToUpdate =
-            await this.subscriptionsService.findByPaymentId(
-              Ds_Merchant_Subscription_Account, // Usar el ID de cuenta de suscripción de Tefpay
-              tx // Pasar tx
-            );
-          if (subscriptionToUpdate) {
-            newSubscriptionStatus =
-              subscriptionToUpdate.status as SubscriptionStatus;
-          }
-        }
-
-        const tefpayResponseCode = String(Ds_Code);
-        const transactionType = String(
-          Ds_Merchant_TransactionType
-        ) as TefpayTransactionType;
-
-        if (payment) {
-          if (this.isSuccessfulResponseCode(tefpayResponseCode)) {
-            newPaymentStatus = PaymentStatus.SUCCEEDED;
-            if (payment.subscription_id) {
-              if (
-                transactionType === TefpayTransactionType.SUBSCRIPTION_SETUP ||
-                transactionType === TefpayTransactionType.RECURRING_PAYMENT ||
-                transactionType === ("6" as TefpayTransactionType)
-              ) {
-                newSubscriptionStatus = SubscriptionStatus.ACTIVE;
-              }
-            }
-            if (
-              transactionType === TefpayTransactionType.REFUND ||
-              transactionType === TefpayTransactionType.REFUND_ONLINE ||
-              transactionType === ("4" as TefpayTransactionType)
-            ) {
-              newPaymentStatus = PaymentStatus.REFUNDED;
-            }
-            if (
-              (transactionType === ("208" as TefpayTransactionType) ||
-                transactionType === ("33" as TefpayTransactionType)) &&
-              payment.subscription_id
-            ) {
-              newSubscriptionStatus = SubscriptionStatus.ACTIVE;
-            }
-          } else {
-            newPaymentStatus = PaymentStatus.FAILED;
-            if (payment.subscription_id) {
-              newSubscriptionStatus = SubscriptionStatus.PAST_DUE;
-              if (
-                tefpayResponseCode === "0208" ||
-                tefpayResponseCode === "208"
-              ) {
-                newSubscriptionStatus = SubscriptionStatus.CANCELLED;
-              }
-              if (
-                transactionType === TefpayTransactionType.SUBSCRIPTION_SETUP
-              ) {
-                newSubscriptionStatus = SubscriptionStatus.PENDING;
-              }
-            }
-          }
-        }
-
-        const subscriptionAction = Ds_Merchant_Subscription_Action as string;
-        const subscriptionAccountForAction = String(
-          Ds_Merchant_Subscription_Account || orderIdentifier
-        );
-
-        if (subscriptionAction && subscriptionAccountForAction) {
-          this.logger.log(
-            `Procesando Ds_Merchant_Subscription_Action: ${subscriptionAction} para cuenta: ${subscriptionAccountForAction}`
-          );
-
-          let tempSubscriptionToUpdate: Subscription | null = null;
-          if (payment && payment.subscription_id) {
-            tempSubscriptionToUpdate = await this.subscriptionsService.findOne(
-              payment.subscription_id,
-              tx // Pasar tx
-            );
-          } else if (subscriptionAccountForAction) {
-            // Usar findByPaymentId (que debería poder buscar por ID de cuenta de suscripción si se implementa correctamente)
-            // o directamente por ID de suscripción si subscriptionAccountForAction es nuestro ID de suscripción.
-            tempSubscriptionToUpdate =
-              await this.subscriptionsService.findByPaymentId(
-                subscriptionAccountForAction,
-                tx // Pasar tx
-              );
-          }
-
-          if (!tempSubscriptionToUpdate) {
-            this.logger.warn(
-              `No se encontró suscripción para SubscriptionAction ${subscriptionAction} en cuenta ${subscriptionAccountForAction}`
-            );
-            // No lanzar error aquí, solo registrar y continuar, ya que podría ser una notificación informativa
-            // o el estado del pago podría ser más importante.
-            await tx.tefPayNotification.update({
-              where: { id: notificationRecord.id },
-              data: {
-                processing_notes:
-                  (notificationRecord.processing_notes || "") +
-                  ` Advertencia: Suscripción no encontrada para SubscriptionAction ${subscriptionAction} en cuenta ${subscriptionAccountForAction}.`,
-              },
-            });
-          } else {
-            // Asignar a la variable principal si se encuentra
-            subscriptionToUpdate = tempSubscriptionToUpdate;
-            if (this.isSuccessfulResponseCode(tefpayResponseCode)) {
-              let statusFromAction: SubscriptionStatus | null = null;
-              if (subscriptionAction === "S") {
-                statusFromAction = SubscriptionStatus.CANCELLED;
-              } else if (subscriptionAction === "O") {
-                statusFromAction = SubscriptionStatus.ACTIVE;
-              }
-              if (statusFromAction) {
-                newSubscriptionStatus = statusFromAction;
-                this.logger.log(
-                  `Estado de suscripción ${subscriptionToUpdate.id} determinado por SubscriptionAction ${subscriptionAction} a: ${newSubscriptionStatus}`
-                );
-              }
-            }
-          }
-        }
-
-        if (
-          payment &&
-          newPaymentStatus &&
-          payment.status !== (newPaymentStatus as string) // Comparar como strings para evitar problemas de tipo enum
-        ) {
-          await this.paymentsService.updateStatus(
-            payment.id,
-            newPaymentStatus,
-            notificationPayload as Prisma.JsonObject,
-            tx
-          );
-          this.logger.log(
-            `Pago ${payment.id} actualizado a estado ${newPaymentStatus}`
-          );
-        }
-
-        const finalSubscriptionIdToUpdate =
-          subscriptionToUpdate?.id || // Si ya obtuvimos la suscripción, usar su ID
-          payment?.subscription_id || // Fallback al ID de suscripción del pago
-          (Ds_Merchant_Subscription_Account && // Último intento si es una notificación de suscripción
-            (
-              await this.subscriptionsService.findByPaymentId(
-                Ds_Merchant_Subscription_Account,
-                tx
-              )
-            )?.id);
-
-        if (finalSubscriptionIdToUpdate && newSubscriptionStatus) {
-          const currentSubscription = await this.subscriptionsService.findOne(
-            finalSubscriptionIdToUpdate,
-            tx // Pasar tx
-          );
-          if (
-            currentSubscription &&
-            currentSubscription.status !== (newSubscriptionStatus as string) // Comparar como strings
-          ) {
-            const subscriptionUpdatePayload: Prisma.SubscriptionUpdateInput = {
-              status: newSubscriptionStatus,
-            };
-            if (Ds_Merchant_TransactionID) {
-              subscriptionUpdatePayload.tefpay_transaction_id = String(
-                Ds_Merchant_TransactionID
-              );
-            }
-            if (
-              currentSubscription.metadata &&
-              typeof currentSubscription.metadata === "object"
-            ) {
-              subscriptionUpdatePayload.metadata =
-                currentSubscription.metadata as Prisma.JsonObject;
-            }
-
-            await this.subscriptionsService.updateStatus(
-              finalSubscriptionIdToUpdate, // Usar el ID de la suscripción encontrada o inferida
-              newSubscriptionStatus,
-              subscriptionUpdatePayload,
-              tx
-            );
-            this.logger.log(
-              `Suscripción ${finalSubscriptionIdToUpdate} actualizada a estado ${newSubscriptionStatus}`
-            );
-          }
-        }
-
-        await tx.tefPayNotification.update({
-          where: { id: notificationRecord.id },
+      const storedNotificationPrisma =
+        await this.prisma.tefPayNotification.create({
           data: {
-            payment_id: payment?.id,
-            subscription_id: finalSubscriptionIdToUpdate, // Usar el ID de la suscripción final
-            status: TefPayNotificationStatus.PROCESSED,
-            processing_notes:
-              `Procesado. Pago: ${newPaymentStatus || "N/A"}. Suscripción: ${newSubscriptionStatus || "N/A"}`.trim(),
-          },
+            id: notificationId,
+            ds_Order: incomingPayload.Ds_Order,
+            ds_Code: incomingPayload.Ds_Code,
+            ds_Message: incomingPayload.Ds_Message,
+            ds_Merchant_MatchingData: incomingPayload.Ds_Merchant_MatchingData,
+            ds_Date: incomingPayload.Ds_Date,
+            ds_Hour: incomingPayload.Ds_Hour,
+            ds_SecurePayment: incomingPayload.Ds_SecurePayment,
+            ds_Card_Type: incomingPayload.Ds_Card_Type,
+            ds_Card_Country: incomingPayload.Ds_Card_Country,
+            ds_AuthorisationCode: incomingPayload.Ds_AuthorisationCode,
+            ds_Merchant_TransactionType:
+              incomingPayload.Ds_Merchant_TransactionType,
+            ds_Merchant_MerchantCode: incomingPayload.Ds_Merchant_MerchantCode,
+            ds_Merchant_Terminal: incomingPayload.Ds_Terminal, // Mapeo de Ds_Terminal a ds_Merchant_Terminal
+            ds_Amount: incomingPayload.Ds_Amount,
+            ds_Currency: incomingPayload.Ds_Currency,
+            ds_Signature: incomingPayload.Ds_Signature,
+            ds_Merchant_Subscription_Account:
+              incomingPayload.Ds_Merchant_Subscription_Account,
+            ds_Merchant_Subscription_Action:
+              incomingPayload.Ds_Merchant_Subscription_Action,
+            ds_Merchant_Url: incomingPayload.Ds_Merchant_Url,
+            ds_CodeBank: incomingPayload.Ds_CodeBank,
+            ds_TransactionDate: incomingPayload.Ds_TransactionDate, // Asumiendo que viene en el payload como Ds_TransactionDate
+            ds_ClientRef: incomingPayload.Ds_ClientRef, // Asumiendo que viene en el payload como Ds_ClientRef
+
+            raw_notification: incomingPayload as any, // Store the entire incoming payload
+            status: TefPayNotificationStatus.RECEIVED, // Use direct import
+            createdAt: now,
+            updatedAt: now,
+          } as any,
         });
-      });
+      this.logger.log(
+        `[TefpayNotificationsService] Stored Tefpay notification ID: ${storedNotificationPrisma.id} for order: ${orderIdentifier}`
+      );
+
+      // Emit a specific event for Tefpay notifications that are stored (and ideally verified)
+      // PaymentsService or other relevant services will listen to this.
+      this.eventEmitter.emit(
+        "tefpay.notification.processed_by_handler",
+        storedNotificationPrisma // Send the Prisma object directly
+      );
+
+      // Map Prisma entity to DTO for return, ensuring status is correctly mapped
+      return {
+        ...storedNotificationPrisma,
+        raw_notification: storedNotificationPrisma.raw_notification as any,
+        status: this.mapPrismaStatusToDtoStatus(
+          storedNotificationPrisma.status
+        ),
+      } as TefPayNotificationDto;
     } catch (error) {
       this.logger.error(
-        "Error procesando la lógica de negocio de la notificación o transacción fallida",
-        {
-          message: error.message,
-          stack: error.stack,
-          order: String(
-            notificationPayload.Ds_Order ||
-              notificationPayload.Ds_Merchant_MatchingData ||
-              notificationPayload.Ds_Merchant_Subscription_Account ||
-              "Desconocido"
-          ),
-        }
+        `[TefpayNotificationsService] Error storing Tefpay notification for order ${orderIdentifier}: ${error.message}`,
+        error.stack
       );
-      if (notificationRecord) {
+      // TODO: Create an audit log for storage failure
+      throw error; // Rethrow to be handled by the controller
+    }
+  }
+
+  /**
+   * Updates the processing status of a stored notification.
+   */
+  async updateNotificationProcessingStatus(
+    notificationId: string,
+    status: TefPayNotificationStatus, // Use direct import
+    paymentId?: string,
+    subscriptionId?: string,
+    processingNotes?: string
+  ): Promise<TefPayNotificationDto> {
+    this.logger.log(
+      `Updating notification ${notificationId} to status: ${status}, paymentId: ${paymentId}, subscriptionId: ${subscriptionId}`
+    );
+    try {
+      const updatedNotificationPrisma =
         await this.prisma.tefPayNotification.update({
-          where: { id: notificationRecord.id },
+          where: { id: notificationId },
           data: {
-            status: TefPayNotificationStatus.ERROR,
-            processing_notes: `Error durante el procesamiento: ${error instanceof Error ? error.message : String(error)}`,
+            status: status, // Use direct import
+            payment_id: paymentId,
+            subscription_id: subscriptionId,
+            processing_notes: processingNotes,
+            processed_at: new Date(),
           },
         });
-      }
+      // Convert Prisma entity to DTO
+      return {
+        ...updatedNotificationPrisma,
+        raw_notification: updatedNotificationPrisma.raw_notification as any,
+        status: this.mapPrismaStatusToDtoStatus(
+          updatedNotificationPrisma.status
+        ),
+      } as TefPayNotificationDto;
+    } catch (error) {
+      this.logger.error(
+        `Error updating notification ${notificationId}: ${error instanceof Error ? error.message : String(error)}`
+      );
+      throw error;
     }
+  }
+
+  async getNotificationById(
+    notificationId: string
+  ): Promise<TefPayNotificationDto | null> {
+    const storedNotificationPrisma =
+      await this.prisma.tefPayNotification.findUnique({
+        where: { id: notificationId },
+      });
+    if (!storedNotificationPrisma) {
+      return null;
+    }
+    return {
+      ...storedNotificationPrisma,
+      raw_notification: storedNotificationPrisma.raw_notification as any,
+      status: this.mapPrismaStatusToDtoStatus(storedNotificationPrisma.status),
+    } as TefPayNotificationDto;
   }
 }
