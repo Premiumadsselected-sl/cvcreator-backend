@@ -49,4 +49,13 @@ export class RegisterUserDto {
   @IsString()
   @IsOptional()
   username?: string; // Mantenemos username por si se quiere pasar explícitamente
+
+  @ApiPropertyOptional({
+    description:
+      "Configuración regional preferida del usuario (ej. 'en', 'es'). Por defecto es 'es'.",
+    example: "en",
+  })
+  @IsString()
+  @IsOptional()
+  locale?: string;
 }

@@ -2,12 +2,13 @@
   "info": {
     "name": "cvcreator-backend API",
     "_postman_id": "YOUR_COLLECTION_ID",
-    "description": "Postman collection for the cvcreator-backend API.",
+    "description": "Colección Postman para la API cvcreator-backend. Esta API gestiona usuarios, autenticación, creación de CVs y cartas de presentación, suscripciones y pagos.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
     {
       "name": "Auth",
+      "description": "Endpoints para el registro, inicio de sesión y gestión de perfiles de usuario.",
       "item": [
         {
           "name": "Register User",
@@ -78,6 +79,7 @@
     },
     {
       "name": "Users",
+      "description": "Endpoints para la gestión de usuarios (CRUD). Requiere permisos de administrador para algunas operaciones.",
       "item": [
         {
           "name": "Create User",
@@ -257,6 +259,7 @@
     },
     {
       "name": "Audit Logs",
+      "description": "Endpoints para acceder a los registros de auditoría del sistema. Requiere permisos de administrador.",
       "item": [
         {
           "name": "Create Audit Log (Admin)",
@@ -346,9 +349,11 @@
     },
     {
       "name": "CV Creator",
+      "description": "Endpoints relacionados con la creación y gestión de CVs y Cartas de Presentación.",
       "item": [
         {
           "name": "Cover Letters",
+          "description": "Gestión de cartas de presentación: crear, leer, actualizar y eliminar.",
           "item": [
             {
               "name": "Create Cover Letter",
@@ -470,6 +475,7 @@
         },
         {
           "name": "CVs",
+          "description": "Gestión de CVs: crear, leer, actualizar y eliminar.",
           "item": [
             {
               "name": "Create CV",
@@ -586,115 +592,8 @@
       ]
     },
     {
-      "name": "General Images",
-      "item": [
-        {
-          "name": "Upload General Image",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
-            ],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": [],
-                  "description": "Image file (jpeg, png, gif, webp), max 10MB"
-                }
-              ]
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/images",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "images"]
-            },
-            "description": "Upload a general-purpose image. Requires user or admin role."
-          },
-          "response": []
-        },
-        {
-          "name": "Find All General Images (Admin)",
-          "request": {
-            "method": "GET",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/images?page=1&limit=10",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "images"],
-              "query": [
-                { "key": "page", "value": "1" },
-                { "key": "limit", "value": "10" }
-              ]
-            },
-            "description": "Retrieves a list of all general-purpose images. Admin only."
-          },
-          "response": []
-        },
-        {
-          "name": "Find One General Image",
-          "request": {
-            "method": "GET",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/images/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "images", ":id"],
-              "variable": [{ "key": "id", "value": "image_id_example" }]
-            },
-            "description": "Retrieves a specific general-purpose image by ID."
-          },
-          "response": []
-        },
-        {
-          "name": "Update General Image",
-          "request": {
-            "method": "PATCH",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/images/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "images", ":id"],
-              "variable": [{ "key": "id", "value": "image_id_example" }]
-            },
-            "description": "Updates metadata for a general-purpose image."
-          },
-          "response": []
-        },
-        {
-          "name": "Delete General Image",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/images/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "images", ":id"],
-              "variable": [{ "key": "id", "value": "image_id_example" }]
-            },
-            "description": "Deletes a general-purpose image."
-          },
-          "response": []
-        }
-      ]
-    },
-    {
       "name": "Payments",
+      "description": "Endpoints para la gestión de pagos, planes y notificaciones de procesadores de pago.",
       "item": [
         {
           "name": "Initiate Payment Flow",
@@ -1589,6 +1488,7 @@
     },
     {
       "name": "Subscriptions",
+      "description": "Endpoints para gestionar las suscripciones de los usuarios a los planes.",
       "item": [
         {
           "name": "Create Subscription",
@@ -1699,19 +1599,117 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "API Tokens",
+      "description": "Endpoints para la gestión de tokens de API para acceso programático.",
+      "item": [
+        {
+          "name": "Create API Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New API Token\",\n  \"expires_in\": 3600,\n  \"scopes\": [\"read\", \"write\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tokens",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tokens"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Find All API Tokens",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tokens?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tokens"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Find One API Token",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tokens/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tokens", ":id"],
+              "variable": [{ "key": "id", "value": "token_id_example" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update API Token",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated API Token Name\",\n  \"expires_in\": 7200,\n  \"scopes\": [\"read\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tokens/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tokens", ":id"],
+              "variable": [{ "key": "id", "value": "token_id_example" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete API Token",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tokens/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tokens", ":id"],
+              "variable": [{ "key": "id", "value": "token_id_example" }]
+            }
+          },
+          "response": []
+        }
+      ]
     }
   ],
+  "event": [],
   "variable": [
     {
       "key": "baseUrl",
-      "value": "http://localhost:3001",
+      "value": "http://localhost:3000",
       "type": "string"
     },
     {
       "key": "jwtToken",
       "value": "",
-      "type": "string",
-      "description": "JWT token obtained after login"
+      "type": "string"
     }
   ]
 }

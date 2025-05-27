@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="{{locale}}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{subject_email}}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; color: #333; }
+        .container { background-color: #f9f9f9; padding: 20px; border-radius: 5px; }
+        .header { color: #444; font-size: 24px; margin-bottom: 20px; }
+        .content p { line-height: 1.6; }
+        .footer { margin-top: 20px; font-size: 12px; color: #777; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">¡Bienvenido/a a {{serviceName}}, {{userName}}!</div>
+        <div class="content">
+            <p>Gracias por registrarte en {{serviceName}}. Estamos encantados de tenerte con nosotros.</p>
+            <p>Explora todas las funcionalidades que {{serviceName}} tiene para ofrecerte y comienza a crear CVs impactantes.</p>
+            <p>Si necesitas ayuda o tienes alguna pregunta, no dudes en contactar a nuestro equipo de soporte en <a href="mailto:{{supportEmail}}">{{supportEmail}}</a>.</p>
+            <p>Puedes acceder a tu cuenta aquí: <a href="{{appBaseUrl}}">{{appBaseUrl}}</a></p>
+        </div>
+        <div class="footer">
+            <p>&copy; {{#if (lookup @root 'year')}}{{year}}{{else}}{{new Date().getFullYear()}}{{/if}} {{serviceName}}. Todos los derechos reservados.</p>
+            <p>Este es un correo electrónico automático, por favor no respondas directamente.</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -43,7 +43,7 @@ interface TefpayPaymentParams {
   Ds_Merchant_MerchantCodeTemplate?: string;
   Ds_Merchant_TemplateNumber?: string;
   Ds_Merchant_AdditionalData?: string;
-  Ds_Merchant_MatchingData?: string; // Ya estaba, pero para confirmar
+  Ds_Merchant_MatchingData?: string;
   Ds_Merchant_Subscription_Account?: string;
   Ds_Merchant_Subscription_ClientName?: string;
   Ds_Merchant_Subscription_ClientEmail?: string;
@@ -54,240 +54,289 @@ interface TefpayPaymentParams {
   Ds_Merchant_Description?: string; // Descripción general del pago
 }
 
-// Helper type for the specific fields used in calculateFormSignature
-type TefpayFormSignatureFields = Pick<
-  TefpayPaymentParams,
-  "Ds_Merchant_Amount" | "Ds_Merchant_MerchantCode" | "Ds_Merchant_MerchantURL" // This corresponds to Ds_Merchant_Url in the new recipe
-> & { Ds_Merchant_MatchingData: string }; // Ds_Merchant_MatchingData es crucial para la firma del FORM
-
 @Injectable()
 export class TefpayService implements IPaymentProcessor {
   private readonly logger = new Logger(TefpayService.name);
-  private tefpayUrl: string;
-  private tefpayBackofficeUrl: string;
-  private tefpayMerchantCode: string;
-  private tefpayPrivateKey: string;
-  private tefpayUrlOk: string;
-  private tefpayUrlKo: string;
-  private appBaseUrl: string;
-  private tefpayDefaultTerminal: string;
-  private tefpayDefaultAmount: string | undefined;
-  private tefpayNotifyUrl: string | undefined;
+  private readonly privateKey: string;
+  private readonly merchantCode: string;
+  private readonly terminal: string;
+  private readonly formUrl: string;
+  private readonly notifyUrl: string;
+  private readonly defaultSuccessUrl: string;
+  private readonly defaultCancelUrl: string;
+  private readonly appBaseUrl: string;
+  private readonly backofficeUrl: string;
 
-  // Nuevas variables de configuración para campos estáticos del formulario
-  private tefpayTransactionTypeSubscription: string;
-  private tefpaySubProcessingMethod: string;
-  private tefpaySubAction: string;
-  private tefpaySubRelFirstCharge: string;
-  private tefpaySubPeriodType: string;
-  private tefpaySubPeriodInterval: string;
-  private tefpaySubIteration: string;
-  private tefpayMerchantCodeTemplate: string | undefined;
-  private tefpayTemplateNumber: string | undefined;
-  private tefpayAdditionalData: string | undefined;
-  private tefpaySubNotifyCustomerEmail: string;
-  private tefpaySubEnable: string;
-  private tefpayTerminalAuth: string | undefined; // Puede ser dinámico o de config
+  // Variables de configuración específicas de Tefpay que se usarán directamente
+  private readonly tefpayTransactionTypeSubscription: string;
+  private readonly tefpaySubProcessingMethod: string;
+  private readonly tefpaySubAction: string;
+  private readonly tefpaySubEnable: string;
+  private readonly tefpaySubRelFirstCharge: string;
+  private readonly tefpaySubPeriodType: string;
+  private readonly tefpaySubPeriodInterval: string;
+  private readonly tefpaySubIteration: string;
+  private readonly tefpaySubNotifyCustomerEmail: string;
+  private readonly tefpayTerminalAuth?: string; // Puede ser opcional o tener un valor por defecto
+  private readonly tefpayMerchantCodeTemplate?: string;
+  private readonly tefpayTemplateNumber?: string;
+  private readonly tefpayAdditionalData?: string;
 
-  constructor(private configService: ConfigService) {
-    // Helper function to get config values and throw if not found
-    const getConfigOrThrow = (key: string, defaultValue?: string): string => {
-      const value = this.configService.get<string>(key);
-      if (value === undefined) {
-        if (defaultValue !== undefined) {
-          this.logger.warn(
-            `Configuration key ${key} is missing, using default value: ${defaultValue}`
-          );
-          return defaultValue;
-        }
-        this.logger.error(`Configuration key ${key} is missing.`);
-        throw new Error(`Configuration key ${key} is missing.`);
-      }
-      return value;
-    };
+  constructor(private readonly configService: ConfigService) {
+    this.privateKey = this.configService.get<string>("TEFPAY_PRIVATE_KEY")!;
+    this.merchantCode = this.configService.get<string>("TEFPAY_MERCHANT_CODE")!;
+    this.terminal = this.configService.get<string>("TEFPAY_TERMINAL")!;
+    this.formUrl = this.configService.get<string>("TEFPAY_FORM_URL")!;
+    this.notifyUrl = this.configService.get<string>("TEFPAY_NOTIFY_URL")!;
+    this.defaultSuccessUrl = this.configService.get<string>(
+      "TEFPAY_DEFAULT_SUCCESS_URL"
+    )!;
+    this.defaultCancelUrl = this.configService.get<string>(
+      "TEFPAY_DEFAULT_CANCEL_URL"
+    )!;
+    this.appBaseUrl = this.configService.get<string>("APP_BASE_URL")!;
+    this.backofficeUrl = this.configService.get<string>(
+      "TEFPAY_BACKOFFICE_URL"
+    )!;
 
-    this.tefpayUrl = getConfigOrThrow("TEFPAY_FORM_URL");
-    this.tefpayBackofficeUrl = getConfigOrThrow("TEFPAY_BACKOFFICE_URL");
-    this.tefpayMerchantCode = getConfigOrThrow("TEFPAY_MERCHANT_CODE");
-    this.tefpayDefaultTerminal = getConfigOrThrow("TEFPAY_TERMINAL", "1");
-    this.tefpayPrivateKey = getConfigOrThrow("TEFPAY_PRIVATE_KEY");
-    this.tefpayUrlOk = getConfigOrThrow("TEFPAY_DEFAULT_SUCCESS_URL");
-    this.tefpayUrlKo = getConfigOrThrow("TEFPAY_DEFAULT_CANCEL_URL");
-    this.appBaseUrl = getConfigOrThrow("APP_BASE_URL");
-    this.tefpayDefaultAmount =
-      this.configService.get<string>("TEFPAY_DS_AMOUNT");
-    this.tefpayNotifyUrl = this.configService.get<string>("TEFPAY_NOTIFY_URL");
+    this.tefpayTransactionTypeSubscription = this.configService.get<string>(
+      "TEFPAY_TRANSACTION_TYPE_SUBSCRIPTION"
+    )!;
+    this.tefpaySubProcessingMethod = this.configService.get<string>(
+      "TEFPAY_SUB_PROCESSING_METHOD"
+    )!;
+    this.tefpaySubAction = this.configService.get<string>("TEFPAY_SUB_ACTION")!;
+    this.tefpaySubEnable = this.configService.get<string>("TEFPAY_SUB_ENABLE")!;
+    this.tefpaySubRelFirstCharge = this.configService.get<string>(
+      "TEFPAY_SUB_REL_FIRST_CHARGE"
+    )!;
+    this.tefpaySubPeriodType = this.configService.get<string>(
+      "TEFPAY_SUB_PERIOD_TYPE"
+    )!;
+    this.tefpaySubPeriodInterval = this.configService.get<string>(
+      "TEFPAY_SUB_PERIOD_INTERVAL"
+    )!;
+    this.tefpaySubIteration = this.configService.get<string>(
+      "TEFPAY_SUB_ITERATION"
+    )!;
+    this.tefpaySubNotifyCustomerEmail = this.configService.get<string>(
+      "TEFPAY_SUB_NOTIFY_CUSTOMER_EMAIL"
+    )!;
 
-    // Cargar nuevas configuraciones estáticas
-    this.tefpayTransactionTypeSubscription = getConfigOrThrow(
-      "TEFPAY_TRANSACTION_TYPE_SUBSCRIPTION",
-      "6"
+    // Opcionales, pueden no estar definidos
+    this.tefpayTerminalAuth = this.configService.get<string>(
+      "TEFPAY_TERMINAL_AUTH"
     );
-    this.tefpaySubProcessingMethod = getConfigOrThrow(
-      "TEFPAY_SUB_PROCESSING_METHOD",
-      "201"
-    );
-    this.tefpaySubAction = getConfigOrThrow("TEFPAY_SUB_ACTION", "C"); // ADVERTENCIA: "C" es inusual para creación. Verificar con Tefpay.
-    this.tefpaySubRelFirstCharge = getConfigOrThrow(
-      "TEFPAY_SUB_REL_FIRST_CHARGE",
-      "02D"
-    );
-    this.tefpaySubPeriodType = getConfigOrThrow("TEFPAY_SUB_PERIOD_TYPE", "M");
-    this.tefpaySubPeriodInterval = getConfigOrThrow(
-      "TEFPAY_SUB_PERIOD_INTERVAL",
-      "1"
-    );
-    this.tefpaySubIteration = getConfigOrThrow("TEFPAY_SUB_ITERATION", "0");
     this.tefpayMerchantCodeTemplate = this.configService.get<string>(
       "TEFPAY_MERCHANT_CODE_TEMPLATE"
     );
     this.tefpayTemplateNumber = this.configService.get<string>(
       "TEFPAY_TEMPLATE_NUMBER"
-    ); // Ej: "07"
+    );
     this.tefpayAdditionalData = this.configService.get<string>(
       "TEFPAY_ADDITIONAL_DATA"
-    ); // Ej: "1"
-    this.tefpaySubNotifyCustomerEmail = getConfigOrThrow(
-      "TEFPAY_SUB_NOTIFY_CUSTOMER_EMAIL",
-      "0"
-    );
-    this.tefpaySubEnable = getConfigOrThrow("TEFPAY_SUB_ENABLE", "1");
-    this.tefpayTerminalAuth = this.configService.get<string>(
-      "TEFPAY_TERMINAL_AUTH"
     );
 
     if (
-      this.tefpayPrivateKey === "TEST_PRIVATE_KEY" ||
-      this.tefpayPrivateKey === "TEST_PRIVATE_KEY_ABCDEFG123456XYZ"
+      !this.privateKey ||
+      !this.merchantCode ||
+      !this.terminal ||
+      !this.formUrl ||
+      !this.notifyUrl ||
+      !this.defaultSuccessUrl ||
+      !this.defaultCancelUrl ||
+      !this.appBaseUrl ||
+      !this.backofficeUrl ||
+      !this.tefpayTransactionTypeSubscription ||
+      !this.tefpaySubProcessingMethod ||
+      !this.tefpaySubAction ||
+      !this.tefpaySubEnable ||
+      !this.tefpaySubRelFirstCharge ||
+      !this.tefpaySubPeriodType ||
+      !this.tefpaySubPeriodInterval ||
+      !this.tefpaySubIteration ||
+      !this.tefpaySubNotifyCustomerEmail
     ) {
-      this.logger.warn(
-        "TefpayService is using a test private key. Ensure this is intentional for development/testing."
+      this.logger.error(
+        "Tefpay configuration is incomplete. Please check all required TEFPAY_* and APP_BASE_URL environment variables."
+      );
+      throw new Error("Tefpay configuration is incomplete.");
+    }
+  }
+
+  private generateSignature(
+    fields: Record<string, any>,
+    recipe: "form" | "s2s_common" | "s2s_subscription"
+  ): string {
+    let stringToSign = "";
+    let generatedSignature = "";
+
+    if (recipe === "form") {
+      // Receta para la firma del formulario de pago (SHA1)
+      // Ds_Amount + Ds_Merchant_MerchantCode + Ds_Merchant_MatchingData + Ds_Merchant_Url + CLAVE_PRIVADA
+      const dsAmount = String(fields.Ds_Amount);
+      const dsMerchantCode = String(fields.Ds_Merchant_MerchantCode);
+      const dsMatchingData = String(fields.Ds_Merchant_MatchingData);
+      const dsMerchantUrl = String(fields.Ds_Merchant_Url); // Esta es la Ds_Merchant_MerchantURL del formulario
+
+      this.logger.debug(
+        `[FORM SIGNATURE] Raw values for signature: Ds_Amount='${dsAmount}', Ds_Merchant_MerchantCode='${dsMerchantCode}', Ds_Merchant_MatchingData='${dsMatchingData}', Ds_Merchant_Url='${dsMerchantUrl}'`
+      );
+
+      stringToSign =
+        dsAmount +
+        dsMerchantCode +
+        dsMatchingData +
+        dsMerchantUrl +
+        this.privateKey;
+      this.logger.debug(
+        `[FORM SIGNATURE] String to sign (SHA1): ${stringToSign.replace(this.privateKey, "[PRIVATE_KEY]")}`
+      );
+      generatedSignature = crypto
+        .createHash("sha1") // Cambiado a SHA1
+        .update(stringToSign)
+        .digest("hex");
+      this.logger.debug(
+        `[FORM SIGNATURE] Generated SHA1 Signature: ${generatedSignature}`
+      );
+    } else if (recipe === "s2s_common") {
+      // Receta común para notificaciones S2S (SHA1)
+      // Ds_Amount + Ds_Merchant_MerchantCode + Ds_Merchant_MatchingData + Ds_Merchant_Url + CLAVE_SECRETA
+      // Ds_Amount aquí es el que viene en la notificación S2S, usualmente sin multiplicar por 100.
+      const dsAmountForS2S = String(fields.Ds_Amount); // Asegurar que es string
+      const dsMerchantCode = String(fields.Ds_Merchant_MerchantCode);
+      const dsMatchingData = String(fields.Ds_Merchant_MatchingData);
+      const dsMerchantUrl = String(fields.Ds_Merchant_Url);
+
+      this.logger.debug(
+        `[S2S SIGNATURE - COMMON] Raw values for signature: Ds_Amount='${dsAmountForS2S}', Ds_Merchant_MerchantCode='${dsMerchantCode}', Ds_Merchant_MatchingData='${dsMatchingData}', Ds_Merchant_Url='${dsMerchantUrl}'`
+      );
+
+      stringToSign =
+        dsAmountForS2S +
+        dsMerchantCode +
+        dsMatchingData +
+        dsMerchantUrl +
+        this.privateKey;
+      this.logger.debug(
+        `[S2S SIGNATURE - COMMON] String to sign (SHA1): ${stringToSign.replace(this.privateKey, "[PRIVATE_KEY]")}`
+      );
+      generatedSignature = crypto
+        .createHash("sha1")
+        .update(stringToSign)
+        .digest("hex");
+      this.logger.debug(
+        `[S2S SIGNATURE - COMMON] Generated SHA1 Signature: ${generatedSignature}`
+      );
+    } else if (recipe === "s2s_subscription") {
+      // Receta para notificaciones S2S de suscripciones (SHA1)
+      // Ds_Subscription_Action + Ds_Subscription_Status + Ds_Subscription_Account + Ds_Subscription_Id + CLAVE_SECRETA
+      const dsSubAction = String(fields.Ds_Subscription_Action);
+      const dsSubStatus = String(fields.Ds_Subscription_Status);
+      const dsSubAccount = String(fields.Ds_Subscription_Account);
+      const dsSubId = String(fields.Ds_Subscription_Id);
+
+      this.logger.debug(
+        `[S2S SIGNATURE - SUBSCRIPTION] Raw values for signature: Ds_Subscription_Action='${dsSubAction}', Ds_Subscription_Status='${dsSubStatus}', Ds_Subscription_Account='${dsSubAccount}', Ds_Subscription_Id='${dsSubId}'`
+      );
+
+      stringToSign =
+        dsSubAction + dsSubStatus + dsSubAccount + dsSubId + this.privateKey;
+      this.logger.debug(
+        `[S2S SIGNATURE - SUBSCRIPTION] String to sign (SHA1): ${stringToSign.replace(this.privateKey, "[PRIVATE_KEY]")}`
+      );
+      generatedSignature = crypto
+        .createHash("sha1")
+        .update(stringToSign)
+        .digest("hex");
+      this.logger.debug(
+        `[S2S SIGNATURE - SUBSCRIPTION] Generated SHA1 Signature: ${generatedSignature}`
       );
     }
-    // The warning for TEFPAY_SUB_ACTION === 'C' has been removed as the user confirmed
-    // that 'C' is the correct value for subscription creation in their specific Tefpay integration.
-    // Original warning logic:
-    // if (this.tefpaySubAction === "C") {
-    //   this.logger.warn(
-    //     "TEFPAY_SUB_ACTION is configured as 'C'. This is unusual for subscription creation and typically means 'Charge' or 'Cancel'. Please verify this value with Tefpay documentation for your specific template."
-    //   );
-    // }
+    return generatedSignature;
   }
 
   // FORM SIGNATURE (SHA1 - for payment redirection form)
-  private calculateFormSignature(fields: TefpayFormSignatureFields): string {
-    // New recipe: Ds_Amount + Ds_Merchant_MerchantCode + Ds_Merchant_MatchingData + Ds_Merchant_Url + TEFPAY_PRIVATE_KEY
-    // Ds_Merchant_Url in the recipe corresponds to fields.Ds_Merchant_MerchantURL here.
-    const signatureBaseString = `${fields.Ds_Merchant_Amount}${fields.Ds_Merchant_MerchantCode}${fields.Ds_Merchant_MatchingData}${fields.Ds_Merchant_MerchantURL}${this.tefpayPrivateKey}`;
-    const calculatedSignature = crypto
-      .createHash("sha1")
-      .update(signatureBaseString)
-      .digest("hex");
-    this.logger.debug(
-      `Calculating FORM signature (SHA1). Base: ${signatureBaseString.replace(this.tefpayPrivateKey, "[SECRET_KEY]")}, Signature: ${calculatedSignature}`
-    );
-    return calculatedSignature;
-  }
+  // private calculateFormSignature(fields: TefpayFormSignatureFields): string {
+  //   // New recipe: Ds_Amount + Ds_Merchant_MerchantCode + Ds_Merchant_MatchingData + Ds_Merchant_Url + TEFPAY_PRIVATE_KEY
+  //   // Ds_Merchant_Url in the recipe corresponds to fields.Ds_Merchant_MerchantURL here.
+  //   const signatureBaseString = `${fields.Ds_Merchant_Amount}${fields.Ds_Merchant_MerchantCode}${fields.Ds_Merchant_MatchingData}${fields.Ds_Merchant_MerchantURL}${this.privateKey}`;
+  //   const calculatedSignature = crypto
+  //     .createHash("sha1")
+  //     .update(signatureBaseString)
+  //     .digest("hex");
+  //   this.logger.debug(
+  //     `Calculating FORM signature (SHA1). Base: ${signatureBaseString.replace(this.privateKey, "[SECRET_KEY]")}, Signature: ${calculatedSignature}`
+  //   );
+  //   return calculatedSignature;
+  // }
 
   // S2S NOTIFICATION SIGNATURE (SHA1 - for incoming webhooks)
-  verifySignature(payload: Record<string, string>): boolean {
-    const receivedSignature = payload.Ds_Signature;
+  verifySignature(payload: Record<string, any>): boolean {
+    this.logger.debug(
+      `[VERIFY SIGNATURE] Received payload for verification: ${JSON.stringify(payload)}`
+    );
+    const receivedSignature = payload.Ds_Signature as string;
 
     if (!receivedSignature) {
       this.logger.warn(
-        "Tefpay S2S Notification: Ds_Signature missing in payload."
+        "[VERIFY SIGNATURE] Ds_Signature missing in S2S notification payload."
       );
       return false;
     }
-    this.logger.debug(
-      `Tefpay S2S Notification: Received Ds_Signature for verification: ${receivedSignature}`
-    );
 
-    // Componentes para la firma SHA1 S2S según la fórmula:
-    // Ds_Amount + Ds_Merchant_MerchantCode + Ds_Merchant_MatchingData + Ds_Merchant_Url + TEFPAY_PRIVATE_KEY
+    let calculatedSignature: string;
+    let signatureRecipeUsed: "s2s_common" | "s2s_subscription" | "unknown" =
+      "unknown";
 
-    const amount = payload.Ds_Amount || this.tefpayDefaultAmount;
-    const merchantCode =
-      payload.Ds_Merchant_MerchantCode || this.tefpayMerchantCode;
-
-    // Fallback para Ds_Merchant_MatchingData: payload.Ds_Merchant_MatchingData || payload.Ds_Merchant_Subscription_Account
-    let matchingData = payload.Ds_Merchant_MatchingData;
-    if (!matchingData) {
+    // Determine which S2S signature recipe to use based on available fields
+    if (
+      payload.Ds_Subscription_Action &&
+      payload.Ds_Subscription_Status &&
+      payload.Ds_Subscription_Account &&
+      payload.Ds_Subscription_Id
+    ) {
       this.logger.debug(
-        "Tefpay S2S Notification: Ds_Merchant_MatchingData not found in payload, attempting fallback to Ds_Merchant_Subscription_Account for signature verification."
+        "[VERIFY SIGNATURE] Attempting S2S Subscription signature recipe."
       );
-      matchingData = payload.Ds_Merchant_Subscription_Account;
-    }
-
-    const callbackUrl = payload.Ds_Merchant_Url || this.tefpayNotifyUrl;
-    const merchantSharedKey = this.tefpayPrivateKey;
-
-    // Log de los componentes que se usarán para la firma
-    this.logger.debug(
-      `Tefpay S2S SHA1 Signature Components:
-        Ds_Amount (used): ${amount || "MISSING_OR_EMPTY"} (from payload: ${payload.Ds_Amount}, fallback from env: ${this.tefpayDefaultAmount})
-        Ds_Merchant_MerchantCode (used): ${merchantCode || "MISSING_OR_EMPTY"} (from payload: ${payload.Ds_Merchant_MerchantCode}, fallback from env: ${this.tefpayMerchantCode})
-        Ds_Merchant_MatchingData (used): ${matchingData || "MISSING_OR_EMPTY"} (from payload.Ds_Merchant_MatchingData: ${payload.Ds_Merchant_MatchingData}, fallback from payload.Ds_Merchant_Subscription_Account: ${payload.Ds_Merchant_Subscription_Account})
-        Ds_Merchant_Url (used): ${callbackUrl || "MISSING_OR_EMPTY"} (from payload: ${payload.Ds_Merchant_Url}, fallback from env: ${this.tefpayNotifyUrl})
-        TEFPAY_PRIVATE_KEY: [SECRET_KEY]`
-    );
-
-    if (!amount) {
-      this.logger.warn(
-        "Tefpay S2S Notification: Amount (Ds_Amount from payload or TEFPAY_DS_AMOUNT from .env) is missing. Cannot calculate SHA1 signature."
+      calculatedSignature = this.generateSignature(payload, "s2s_subscription");
+      signatureRecipeUsed = "s2s_subscription";
+    } else if (
+      payload.Ds_Amount &&
+      payload.Ds_Merchant_MerchantCode &&
+      payload.Ds_Merchant_MatchingData &&
+      payload.Ds_Merchant_Url
+    ) {
+      this.logger.debug(
+        "[VERIFY SIGNATURE] Attempting S2S Common signature recipe."
       );
-      return false;
-    }
-    if (!merchantCode) {
-      this.logger.warn(
-        "Tefpay S2S Notification: MerchantCode (Ds_Merchant_MerchantCode from payload or TEFPAY_MERCHANT_CODE from .env) is missing. Cannot calculate SHA1 signature."
-      );
-      return false;
-    }
-    if (!matchingData) {
-      this.logger.warn(
-        "Tefpay S2S Notification: MatchingData (Ds_Merchant_MatchingData or Ds_Merchant_Subscription_Account from payload) is MISSING. Cannot calculate SHA1 signature."
-      );
-      return false;
-    }
-    if (!callbackUrl) {
-      this.logger.warn(
-        "Tefpay S2S Notification: CallbackUrl (Ds_Merchant_Url from payload or TEFPAY_NOTIFY_URL from .env) is missing. Cannot calculate SHA1 signature."
-      );
-      return false;
-    }
-    // La presencia de la clave privada se verifica implícitamente en el constructor mediante getConfigOrThrow
-
-    const signatureBaseString =
-      amount + merchantCode + matchingData + callbackUrl + merchantSharedKey;
-
-    this.logger.debug(
-      `Tefpay S2S Notification: SHA1 Signature Base String (raw): ${signatureBaseString.replace(merchantSharedKey, "[SECRET_KEY]")}`
-    );
-    this.logger.debug(
-      `Tefpay S2S Notification: SHA1 Signature Base (concatenated values): ${amount}+${merchantCode}+${matchingData}+${callbackUrl}+[SECRET_KEY]`
-    );
-
-    const calculatedSignature = crypto
-      .createHash("sha1")
-      .update(signatureBaseString)
-      .digest("hex");
-
-    this.logger.debug(
-      `Tefpay S2S Notification: Calculated SHA1 Signature: ${calculatedSignature}, Received Ds_Signature: ${receivedSignature}`
-    );
-
-    if (calculatedSignature.toLowerCase() === receivedSignature.toLowerCase()) {
-      this.logger.log(
-        `Tefpay S2S SHA1 Signature VERIFIED for MatchingData: ${matchingData}.`
-      );
-      return true;
+      calculatedSignature = this.generateSignature(payload, "s2s_common");
+      signatureRecipeUsed = "s2s_common";
     } else {
       this.logger.warn(
-        `Tefpay S2S SHA1 Signature FAILED for MatchingData: ${matchingData}. Expected (SHA1): ${calculatedSignature}, Got: ${receivedSignature}`
+        "[VERIFY SIGNATURE] Could not determine S2S signature recipe based on payload fields. Cannot verify."
+      );
+      this.logger.debug(
+        `[VERIFY SIGNATURE] Payload fields for recipe check: Ds_Subscription_Action=${payload.Ds_Subscription_Action}, Ds_Subscription_Status=${payload.Ds_Subscription_Status}, Ds_Subscription_Account=${payload.Ds_Subscription_Account}, Ds_Subscription_Id=${payload.Ds_Subscription_Id}, Ds_Amount=${payload.Ds_Amount}, Ds_Merchant_MatchingData=${payload.Ds_Merchant_MatchingData}, Ds_Merchant_Url=${payload.Ds_Merchant_Url}`
       );
       return false;
     }
+
+    this.logger.log(
+      `[VERIFY SIGNATURE] Tefpay S2S Notification (Recipe: ${signatureRecipeUsed}): Calculated Signature: ${calculatedSignature}, Received Ds_Signature: ${receivedSignature}`
+    );
+
+    if (calculatedSignature.toLowerCase() !== receivedSignature.toLowerCase()) {
+      this.logger.warn(
+        `[VERIFY SIGNATURE] Tefpay S2S Signature (Recipe: ${signatureRecipeUsed}) FAILED for MatchingData/SubscriptionAccount: '${payload.Ds_Merchant_MatchingData || payload.Ds_Subscription_Account}'. Expected: ${calculatedSignature}, Got: ${receivedSignature}`
+      );
+      return false;
+    }
+
+    this.logger.log(
+      `[VERIFY SIGNATURE] Tefpay S2S Signature (Recipe: ${signatureRecipeUsed}) VERIFIED for MatchingData/SubscriptionAccount: '${payload.Ds_Merchant_MatchingData || payload.Ds_Subscription_Account}'.`
+    );
+    return true;
   }
 
   preparePaymentParameters(
@@ -309,8 +358,8 @@ export class TefpayService implements IPaymentProcessor {
 
     // Convertir el importe a céntimos para Tefpay
     // Ej: si amount es 49.99 (EUR), se convierte a 4999
-    const amountInCents = Math.round(amount * 100);
-    const amountString = amountInCents.toString();
+    // const amountInCents = Math.round(amount * 100); // amount ya viene en céntimos.
+    const amountString = amount.toString();
     const system_payment_code = order; // Para logging, MerchantData y URLs OK/KO
 
     const formMatchingData = String(
@@ -320,27 +369,25 @@ export class TefpayService implements IPaymentProcessor {
       `Generated Ds_Merchant_MatchingData for FORM: ${formMatchingData}`
     );
 
-    let terminalToUse = this.tefpayDefaultTerminal;
+    let terminalToUse = this.terminal;
     if (requestedTerminal) {
       terminalToUse = requestedTerminal;
     } else if (locale) {
       // Lógica simple para derivar terminal de locale, ajustar según necesidad
       if (locale.startsWith("es")) {
         terminalToUse =
-          this.configService.get<string>("TEFPAY_TERMINAL_ES") ||
-          this.tefpayDefaultTerminal;
+          this.configService.get<string>("TEFPAY_TERMINAL_ES") || this.terminal;
       } else if (locale.startsWith("en")) {
         terminalToUse =
-          this.configService.get<string>("TEFPAY_TERMINAL_EN") ||
-          this.tefpayDefaultTerminal;
+          this.configService.get<string>("TEFPAY_TERMINAL_EN") || this.terminal;
       }
     }
     this.logger.debug(
       `Using Tefpay Terminal: ${terminalToUse} for locale: ${locale}`
     );
 
-    const finalSuccessUrl = success_url || this.tefpayUrlOk;
-    const finalCancelUrl = cancel_url || this.tefpayUrlKo;
+    const finalSuccessUrl = success_url || this.defaultSuccessUrl;
+    const finalCancelUrl = cancel_url || this.defaultCancelUrl;
     const urlOkWithPaymentCode = new URL(finalSuccessUrl);
     urlOkWithPaymentCode.searchParams.append(
       "payment_code",
@@ -369,33 +416,30 @@ export class TefpayService implements IPaymentProcessor {
 
     const tefpayFieldsBase: Partial<TefpayPaymentParams> = {
       // Campos obligatorios y comunes
-      Ds_Merchant_Amount: amountString, // Ya está en céntimos
-      Ds_Merchant_MerchantCode: this.tefpayMerchantCode,
+      Ds_Merchant_Amount: amountString,
+      Ds_Merchant_MerchantCode: this.merchantCode,
       Ds_Merchant_Currency:
-        currency === "EUR" ? "978" : currency === "USD" ? "840" : "978", // Ajustar si se soportan más monedas
+        currency === "EUR" ? "978" : currency === "USD" ? "840" : "978",
       Ds_Merchant_Terminal: terminalToUse,
-      Ds_Merchant_MerchantURL:
-        notification_url ||
-        this.tefpayNotifyUrl ||
-        `${this.appBaseUrl}/api/v1/payments/tefpay/webhook`,
+      Ds_Merchant_MerchantURL: notification_url || this.notifyUrl,
       Ds_Merchant_UrlOK: urlOkWithPaymentCode.toString(),
       Ds_Merchant_UrlKO: urlKoWithError.toString(),
-      Ds_Merchant_MatchingData: formMatchingData, // Crucial para la firma y seguimiento
+      Ds_Merchant_MatchingData: formMatchingData,
 
       // Campos de idioma
       Ds_Merchant_Lang: tefpayLang,
       Ds_Merchant_ConsumerLanguage: consumerLanguage,
 
       // Descripción general del pago (puede ser la misma que la de suscripción o más genérica)
-      Ds_Merchant_Description: product_description?.substring(0, 125), // Tefpay suele tener un límite
+      Ds_Merchant_Description: product_description?.substring(0, 125),
 
       // Campos específicos de la nueva configuración de formulario (muchos son para suscripciones)
-      Ds_Merchant_TransactionType: this.tefpayTransactionTypeSubscription, // Ej: "6" para suscripción con autorización
-      Ds_Merchant_Subscription_ProcessingMethod: this.tefpaySubProcessingMethod, // Ej: "201"
-      Ds_Merchant_Subscription_Action: this.tefpaySubAction, // Ej: "C" (VERIFICAR ESTE VALOR)
+      Ds_Merchant_TransactionType: this.tefpayTransactionTypeSubscription,
+      Ds_Merchant_Subscription_ProcessingMethod: this.tefpaySubProcessingMethod,
+      Ds_Merchant_Subscription_Action: this.tefpaySubAction,
 
-      Ds_Merchant_Subscription_Enable: this.tefpaySubEnable, // Ej: "1"
-      Ds_Merchant_Subscription_Account: formMatchingData, // Usar el mismo valor que Ds_Merchant_MatchingData para la creación
+      Ds_Merchant_Subscription_Enable: this.tefpaySubEnable,
+      Ds_Merchant_Subscription_Account: formMatchingData,
 
       // Importe recurrente de la suscripción (trial es Ds_Merchant_Amount)
       // Asegurarse que subscriptionChargeAmount también se pase en céntimos si viene de nuestro sistema en Euros
@@ -403,10 +447,10 @@ export class TefpayService implements IPaymentProcessor {
         ? Math.round(parseFloat(subscriptionChargeAmount) * 100).toString()
         : undefined,
 
-      Ds_Merchant_Subscription_RelFirstCharge: this.tefpaySubRelFirstCharge, // Ej: "02D"
-      Ds_Merchant_Subscription_PeriodType: this.tefpaySubPeriodType, // Ej: "M"
-      Ds_Merchant_Subscription_PeriodInterval: this.tefpaySubPeriodInterval, // Ej: "1"
-      Ds_Merchant_Subscription_Iteration: this.tefpaySubIteration, // Ej: "0" para inicio
+      Ds_Merchant_Subscription_RelFirstCharge: this.tefpaySubRelFirstCharge,
+      Ds_Merchant_Subscription_PeriodType: this.tefpaySubPeriodType,
+      Ds_Merchant_Subscription_PeriodInterval: this.tefpaySubPeriodInterval,
+      Ds_Merchant_Subscription_Iteration: this.tefpaySubIteration,
 
       Ds_Merchant_Subscription_ClientName: customerName,
       Ds_Merchant_Subscription_ClientEmail: customer_email
@@ -415,12 +459,12 @@ export class TefpayService implements IPaymentProcessor {
       Ds_Merchant_Subscription_Description: subscriptionDescription?.substring(
         0,
         255
-      ), // Límite típico
+      ),
       Ds_Merchant_Subscription_NotifyCostumerByEmail:
-        this.tefpaySubNotifyCustomerEmail, // Ej: "0"
+        this.tefpaySubNotifyCustomerEmail,
 
       // Campos de Terminal y Plantilla (si se usan)
-      Ds_Merchant_TerminalAuth: tefpayTerminalAuthValue, // Puede venir de metadata o config
+      Ds_Merchant_TerminalAuth: tefpayTerminalAuthValue,
       Ds_Merchant_MerchantCodeTemplate: this.tefpayMerchantCodeTemplate,
       Ds_Merchant_TemplateNumber: this.tefpayTemplateNumber,
       Ds_Merchant_AdditionalData: this.tefpayAdditionalData,
@@ -468,29 +512,35 @@ export class TefpayService implements IPaymentProcessor {
     }
 
     // Campos para la firma del FORMULARIO (SHA1)
-    const formSignatureFields: TefpayFormSignatureFields = {
-      Ds_Merchant_Amount: tefpayFieldsBase.Ds_Merchant_Amount!,
+    // La receta es: Ds_Amount + Ds_Merchant_MerchantCode + Ds_Merchant_MatchingData + Ds_Merchant_Url + CLAVE_PRIVADA
+    // Donde Ds_Merchant_Url es la URL de notificación S2S (Ds_Merchant_MerchantURL en tefpayFieldsBase)
+    const formSignatureRecipeFields = {
+      Ds_Amount: tefpayFieldsBase.Ds_Merchant_Amount!, // Importe en céntimos
       Ds_Merchant_MerchantCode: tefpayFieldsBase.Ds_Merchant_MerchantCode!,
-      Ds_Merchant_MatchingData: formMatchingData, // Siempre usar el formMatchingData generado
-      Ds_Merchant_MerchantURL: tefpayFieldsBase.Ds_Merchant_MerchantURL!,
+      Ds_Merchant_MatchingData: formMatchingData, // El MatchingData generado para el formulario
+      Ds_Merchant_Url: tefpayFieldsBase.Ds_Merchant_MerchantURL!, // La URL de notificación S2S
     };
-    const calculatedFormSignature =
-      this.calculateFormSignature(formSignatureFields);
+
+    const calculatedFormSignature = this.generateSignature(
+      formSignatureRecipeFields,
+      "form"
+    );
 
     const responseFields: Record<string, string> = {
       ...(tefpayFieldsBase as Record<string, string>),
-      Ds_Signature: calculatedFormSignature, // El frontend mapeará esto a Ds_Merchant_MerchantSignature
+      Ds_Merchant_Order: system_payment_code,
+      Ds_Signature: calculatedFormSignature,
     };
 
     this.logger.log(
       `Preparing Tefpay FORM payment (Subscription Flow) for internal order ${system_payment_code}. Locale: ${locale}, Tefpay Lang: ${tefpayLang}`
     );
     this.logger.debug(
-      `Tefpay FORM payment fields for response: ${JSON.stringify(responseFields).replace(this.tefpayPrivateKey, "[SECRET_KEY]")}`
+      `Tefpay FORM payment fields for response: ${JSON.stringify(responseFields).replace(this.privateKey, "[SECRET_KEY]")}`
     );
 
     return {
-      url: this.tefpayUrl,
+      url: this.formUrl,
       fields: responseFields,
       payment_processor_name: "tefpay",
     };
@@ -540,7 +590,7 @@ export class TefpayService implements IPaymentProcessor {
         `Tefpay S2S Notification: Payment SUCCEEDED for Ds_Merchant_MatchingData: ${tefpayMatchingData}. Ds_Code: ${tefpayResponseCode} (${tefpayResponseMessage})`
       );
 
-      // const tefpayTransactionType = payload.Ds_Merchant_TransactionType; // Variable no utilizada, comentada o eliminada
+      // const tefpayTransactionType = payload.Ds_Merchant_TransactionType;
       const tefpaySubscriptionAccount =
         payload.Ds_Merchant_Subscription_Account;
 
@@ -626,7 +676,7 @@ export class TefpayService implements IPaymentProcessor {
   }
 
   async requestSubscriptionCancellation(params: {
-    processorSubscriptionId: string; // Este es el Ds_Merchant_Subscription_Account o el ID que Tefpay usa para la suscripción
+    processorSubscriptionId: string;
     cancellationReason?: string;
   }): Promise<SubscriptionCancellationResponse> {
     this.logger.log(
@@ -634,8 +684,8 @@ export class TefpayService implements IPaymentProcessor {
     );
 
     const payload = new URLSearchParams();
-    payload.append("Ds_Merchant_MerchantCode", this.tefpayMerchantCode);
-    payload.append("Ds_Merchant_Terminal", this.tefpayDefaultTerminal); // Usar terminal por defecto o uno específico si es necesario
+    payload.append("Ds_Merchant_MerchantCode", this.merchantCode);
+    payload.append("Ds_Merchant_Terminal", this.terminal);
     // Para cancelar una suscripción, el "order" suele ser el ID de la suscripción de Tefpay.
     // Este ID podría ser Ds_Merchant_Subscription_Account o Ds_Merchant_Identifier si se usó para crearla.
     payload.append("Ds_Merchant_Order", params.processorSubscriptionId);
@@ -644,21 +694,21 @@ export class TefpayService implements IPaymentProcessor {
     payload.append("Ds_Currency", "978"); // Moneda (EUR por defecto, confirmar si es necesario)
 
     const s2sSignature = this.calculateBackofficeS2SSignature(
-      this.tefpayMerchantCode,
+      this.merchantCode,
       params.processorSubscriptionId,
-      this.tefpayDefaultTerminal,
+      this.terminal,
       "0",
       "978",
-      "C", // TransactionType para la firma
-      this.tefpayPrivateKey
+      "C",
+      this.privateKey
     );
     payload.append("Ds_Signature", s2sSignature);
 
     try {
       this.logger.debug(
-        `Sending Tefpay S2S subscription cancellation: ${this.tefpayBackofficeUrl}, Payload: ${payload.toString()}`
+        `Sending Tefpay S2S subscription cancellation: ${this.backofficeUrl}, Payload: ${payload.toString()}`
       );
-      const response = await axios.post(this.tefpayBackofficeUrl, payload, {
+      const response = await axios.post(this.backofficeUrl, payload, {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
       });
 
@@ -827,12 +877,8 @@ function metadataIndicatesSubscriptionInitial(merchantData?: string): boolean {
       metadata.form_matching_data &&
       metadata.payment_code === metadata.form_matching_data
     );
-  } catch (parseError: any) {
-    // Renombrado para evitar conflicto y usado en log
-    // console.debug("Metadata parsing error or field missing for subscription check:", parseError.message);
-    this.logger.debug(
-      `Metadata parsing error or field missing for subscription check: ${parseError.message}`
-    );
+  } catch {
+    // El error de parseo se ignora intencionalmente, la función devuelve false.
     return false;
   }
 }

@@ -1,16 +1,13 @@
 import { Module } from "@nestjs/common";
-import { EmailsSystemService } from "./emails-system.service";
+import { EmailsService } from "./emails.service"; // Corregido: EmailsService y la ruta
 import { ConfigModule } from "@nestjs/config";
-import { EmailLogsModule } from "./email-logs/email-logs.module"; // Importar EmailLogsModule
+import { EmailLogsModule } from "./email-logs/email-logs.module";
 // import { EmailsSystemController } from './emails-system.controller'; // Descomentar si se necesita un controlador
 
 @Module({
-  imports: [
-    ConfigModule,
-    EmailLogsModule, // Añadir EmailLogsModule a los imports
-  ],
+  imports: [ConfigModule, EmailLogsModule],
   // controllers: [EmailsSystemController], // Descomentar si se necesita un controlador
-  providers: [EmailsSystemService],
-  exports: [EmailsSystemService],
+  providers: [EmailsService], // Corregido: EmailsService
+  exports: [EmailsService], // Corregido: EmailsService
 })
 export class EmailsSystemModule {}

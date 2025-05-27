@@ -1,0 +1,65 @@
+<html lang="{{locale}}">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{subject_email}}</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+        color: #333;
+      }
+      .container {
+        background-color: #f9f9f9;
+        padding: 20px;
+        border-radius: 5px;
+      }
+      .header {
+        color: #444;
+        font-size: 20px;
+        margin-bottom: 20px;
+      }
+      .content p {
+        line-height: 1.6;
+      }
+      .message-details {
+        background-color: #fff;
+        border: 1px solid #ddd;
+        padding: 15px;
+        margin-top: 15px;
+        border-radius: 4px;
+      }
+      .footer {
+        margin-top: 20px;
+        font-size: 12px;
+        color: #777;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">Nuevo Mensaje de Contacto Recibido -
+        {{serviceName}}</div>
+      <div class="content">
+        <p>Se ha recibido un nuevo mensaje a través del formulario de contacto
+          del sitio web
+          {{serviceName}}.</p>
+        <div class="message-details">
+          <p><strong>Nombre:</strong> {{from_name}}</p>
+          <p><strong>Email:</strong>
+            <a href="mailto:{{from_email}}">{{from_email}}</a></p>
+          <p><strong>Asunto/Opción:</strong>
+            {{#if option}}{{option}}{{else}}No especificado{{/if}}</p>
+          <p><strong>Mensaje:</strong></p>
+          <p>{{messageBody}}</p>
+        </div>
+        <p>Por favor, responde a este mensaje lo antes posible.</p>
+      </div>
+      <div class="footer">
+        <p>Este es un correo de notificación para el administrador.</p>
+      </div>
+    </div>
+  </body>
+</html>

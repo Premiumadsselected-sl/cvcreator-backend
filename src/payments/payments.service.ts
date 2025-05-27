@@ -19,10 +19,11 @@ import {
   Subscription,
   TefPayNotificationStatus,
 } from "@prisma/client";
-import { TefpayService } from "./tefpay/tefpay.service";
 import { InitiatePaymentDto } from "./dto/initiate-payment.dto";
 import { TefpayNotificationsService } from "./tefpay/notifications/notifications.service";
 import { PlansService } from "src/payments/plans/plans.service";
+import { PaymentProcessorRegistryService } from "./payment-processor-registry.service";
+import { TefpayService } from "./tefpay/tefpay.service"; // Necesario para el tipado del procesador
 
 // Placeholder for PaymentStatus enum if not from Prisma
 enum PaymentStatus {
@@ -80,7 +81,7 @@ export class PaymentsService {
     private readonly usersService: UsersService,
     private readonly subscriptionsService: SubscriptionsService,
     private readonly auditLogsService: AuditLogsService,
-    private readonly tefpayService: TefpayService,
+    private readonly registryService: PaymentProcessorRegistryService, // Añadido
     private readonly tefPayNotificationsService: TefpayNotificationsService,
     private readonly plansService: PlansService
   ) {}
@@ -137,6 +138,16 @@ export class PaymentsService {
     initiatePaymentDto: InitiatePaymentDto, // DTO should have plan_id, return_url. subscription_id is optional.
     userId: string
   ): Promise<InitiatePaymentResponseDto> {
+    const tefpayService = this.registryService.getProcessor(
+      "tefpay"
+    ) as TefpayService; // CORREGIDO
+    if (!tefpayService) {
+      this.logger.error(
+        "Tefpay payment processor not available or not enabled."
+      );
+      throw new InternalServerErrorException("Servicio de pago no disponible.");
+    }
+
     const { plan_id, return_url: dto_return_url } = initiatePaymentDto;
     const subscription_id = (initiatePaymentDto as any).subscription_id;
 
@@ -218,7 +229,8 @@ export class PaymentsService {
     // TefpayService will generate Ds_Merchant_MatchingData internally.
     // We pass our internalOrderReference as 'order' for TefpayService's internal logging/use if needed,
     // but it's NOT directly sent as Ds_Merchant_Order to Tefpay.
-    const tefpayParams = this.tefpayService.preparePaymentParameters({
+    const tefpayParams = tefpayService.preparePaymentParameters({
+      // Modificado para usar la instancia del registro
       amount: plan.price,
       currency: plan.currency,
       order: internalOrderReference, // This is our internal reference, NOT Ds_Merchant_Order
@@ -305,60 +317,70 @@ export class PaymentsService {
     };
   }
 
-  @OnEvent("tefpay.notification.processed_by_handler")
-  async handleTefpayNotificationEvent(
-    storedNotification: PrismaTefPayNotification
-  ): Promise<void> {
+  @OnEvent("tefpay.notification.processed_by_handler") // CORREGIDO: Nombre del evento
+  async handleTefpayNotificationEvent(payload: {
+    notification: PrismaTefPayNotification;
+    parsedData: any;
+  }) {
+    const { notification, parsedData } = payload;
     this.logger.log(
-      `PaymentsService: Event 'tefpay.notification.processed_by_handler' received. StoredNotification ID: ${storedNotification.id}`
+      `Processing Tefpay notification event for notification ID: ${notification.id}`
     );
 
-    const rawPayload = storedNotification.raw_notification as Record<
-      string,
-      any
-    >;
-    const storedNotificationId = storedNotification.id;
+    const tefpayService = this.registryService.getProcessor(
+      "tefpay"
+    ) as TefpayService; // CORREGIDO
+    if (!tefpayService) {
+      this.logger.error(
+        "Tefpay payment processor not available during notification handling."
+      );
+      // No lanzar excepción aquí directamente, ya que es un manejador de eventos.
+      // Considerar una estrategia de reintento o alerta si es crítico.
+      return;
+    }
 
-    if (!rawPayload.Ds_Signature) {
+    const storedNotificationId = notification.id;
+
+    if (!parsedData.Ds_Signature) {
       this.logger.warn(
-        `Tefpay S2S notification signature is MISSING. Order: ${rawPayload.Ds_Merchant_MatchingData}. Cannot validate.`
+        `Tefpay S2S notification signature is MISSING. Order: ${parsedData.Ds_Merchant_MatchingData}. Cannot validate.`
       );
       await this.tefPayNotificationsService.updateNotificationProcessingStatus(
         storedNotificationId,
         TefPayNotificationStatus.SIGNATURE_MISSING,
-        storedNotification.payment_id || undefined,
-        storedNotification.subscription_id || undefined,
+        notification.payment_id || undefined,
+        notification.subscription_id || undefined,
         "S2S Signature missing in notification."
       );
       return;
     }
 
-    const isSignatureValid = this.tefpayService.verifySignature(rawPayload);
+    const isSignatureValid = tefpayService.verifySignature(parsedData); // Modificado para usar la instancia del registro
 
     if (!isSignatureValid) {
       this.logger.warn(
-        `Tefpay S2S notification signature validation FAILED. Order: ${rawPayload.Ds_Merchant_MatchingData}.`
+        `Tefpay S2S notification signature validation FAILED. Order: ${parsedData.Ds_Merchant_MatchingData}.`
       );
       await this.tefPayNotificationsService.updateNotificationProcessingStatus(
         storedNotificationId,
         TefPayNotificationStatus.SIGNATURE_FAILED,
-        storedNotification.payment_id || undefined,
-        storedNotification.subscription_id || undefined,
+        notification.payment_id || undefined,
+        notification.subscription_id || undefined,
         "Signature validation failed."
       );
       return;
     }
 
     this.logger.log(
-      `Tefpay S2S notification signature VERIFIED. Order: ${rawPayload.Ds_Merchant_MatchingData || rawPayload.Ds_Merchant_Subscription_Account}.` // Log either, as one should be present
+      `Tefpay S2S notification signature VERIFIED. Order: ${parsedData.Ds_Merchant_MatchingData || parsedData.Ds_Merchant_Subscription_Account}.` // Log either, as one should be present
     );
 
     let paymentRecord: Payment | null = null;
-    const primaryMatchingData = rawPayload.Ds_Merchant_MatchingData as
+    const primaryMatchingData = parsedData.Ds_Merchant_MatchingData as
       | string
       | undefined;
     const secondaryMatchingData =
-      rawPayload.Ds_Merchant_Subscription_Account as string | undefined;
+      parsedData.Ds_Merchant_Subscription_Account as string | undefined;
     let lookupValue: string | undefined;
     let lookupSourceDescription: string = "";
 
@@ -386,8 +408,8 @@ export class PaymentsService {
       await this.tefPayNotificationsService.updateNotificationProcessingStatus(
         storedNotificationId,
         TefPayNotificationStatus.ERROR,
-        storedNotification.payment_id || undefined,
-        storedNotification.subscription_id || undefined,
+        notification.payment_id || undefined,
+        notification.subscription_id || undefined,
         `Payment record not found. Attempted with ${lookupSourceDescription}.`
       );
       return;
@@ -398,7 +420,7 @@ export class PaymentsService {
     );
 
     // Associate payment_id with the notification if it wasn't (e.g., if found via a different key than initially assumed
-    if (storedNotification.payment_id !== paymentRecord.id) {
+    if (notification.payment_id !== paymentRecord.id) {
       await this.prisma.tefPayNotification.update({
         where: { id: storedNotificationId },
         data: { payment_id: paymentRecord.id },
@@ -407,11 +429,11 @@ export class PaymentsService {
 
     const userIdForAudit: string = paymentRecord.user_id;
     const tefpaySubscriptionAccount =
-      rawPayload.Ds_Merchant_Subscription_Account;
-    const tefpayTransactionId = rawPayload.Ds_Merchant_TransactionID;
+      parsedData.Ds_Merchant_Subscription_Account;
+    const tefpayTransactionId = parsedData.Ds_Merchant_TransactionID;
 
     const initialAuditDetails: any = {
-      merchant_params_from_payload: rawPayload,
+      merchant_params_from_payload: parsedData,
       payment_record_id: paymentRecord.id,
       stored_notification_id: storedNotificationId,
     };
@@ -446,20 +468,20 @@ export class PaymentsService {
         );
         const simulatedEvent: TefpayWebhookEvent = {
           id: storedNotificationId,
-          type: this.mapTefpayNotificationToEventType(rawPayload),
+          type: this.mapTefpayNotificationToEventType(parsedData),
           data: {
             object: {
               subscription: tefpaySubscriptionAccount,
-              id: rawPayload.Ds_Merchant_MatchingData,
-              ...(parseInt(rawPayload.Ds_Code || "999", 10) < 100 && {
-                amount_paid: rawPayload.Ds_Amount
-                  ? parseInt(rawPayload.Ds_Amount, 10)
+              id: parsedData.Ds_Merchant_MatchingData,
+              ...(parseInt(parsedData.Ds_Code || "999", 10) < 100 && {
+                amount_paid: parsedData.Ds_Amount
+                  ? parseInt(parsedData.Ds_Amount, 10)
                   : undefined,
-                currency: rawPayload.Ds_Currency,
+                currency: parsedData.Ds_Currency,
               }),
-              ...(parseInt(rawPayload.Ds_Code || "0", 10) >= 100 && {
-                amount_due: rawPayload.Ds_Amount
-                  ? parseInt(rawPayload.Ds_Amount, 10)
+              ...(parseInt(parsedData.Ds_Code || "0", 10) >= 100 && {
+                amount_due: parsedData.Ds_Amount
+                  ? parseInt(parsedData.Ds_Amount, 10)
                   : undefined,
               }),
               plan: {
@@ -467,7 +489,7 @@ export class PaymentsService {
                   this.getMetadataValue(paymentRecord.metadata, "plan_id") ||
                   undefined,
               },
-              status: rawPayload.Ds_Merchant_Subscription_Action,
+              status: parsedData.Ds_Merchant_Subscription_Action,
             } as TefpayWebhookEvent["data"]["object"],
           },
         };
@@ -482,13 +504,16 @@ export class PaymentsService {
         this.logger.log(
           `Processing as initial payment/subscription notification for payment: ${paymentRecord.id}`
         );
-        await this.processInitialPaymentEvent(
-          rawPayload,
+        const createdSubscriptionId = await this.processInitialPaymentEvent(
+          parsedData,
           paymentRecord,
           auditEntry.id,
           initialAuditDetails,
           storedNotificationId
         );
+        if (createdSubscriptionId) {
+          paymentRecord.subscription_id = createdSubscriptionId;
+        }
       }
       const finalNotificationState =
         await this.prisma.tefPayNotification.findUnique({
@@ -541,38 +566,52 @@ export class PaymentsService {
     rawPayload: Record<string, any>
   ): string {
     const action = rawPayload.Ds_Merchant_Subscription_Action;
-    const responseCode = parseInt(rawPayload.Ds_Code || "999", 10);
-    const transactionType = rawPayload.Ds_Merchant_TransactionType; // Assuming this field exists for initial subscription
+    const responseCode = parseInt(rawPayload.Ds_Code || "-1", 10); // Usar -1 para que no coincida con éxito por defecto
+    const transactionType = rawPayload.Ds_Merchant_TransactionType;
+    // const subscriptionAccount = rawPayload.Ds_Merchant_Subscription_Account; // No se usa directamente aquí, pero es relevante para el contexto
 
-    // Check for initial subscription creation success first
-    // This condition might need adjustment based on actual Tefpay parameters for initial subscription success
-    if (transactionType === "A" && !action && responseCode < 100) {
-      // Example: 'A' for Autorización/Alta, no specific subscription action yet
+    // Condición de éxito de Tefpay (basado en logs: Ds_Code: "100" es aprobación)
+    // Otros códigos de éxito podrían ser < 100 según la documentación completa de Tefpay.
+    // Por ahora, nos basamos en el log observado donde Ds_Code: "100" es "Transacción aprobada".
+    const isSuccess = responseCode === 100;
+
+    // Caso 1: Notificación de creación/confirmación de suscripción (usualmente Ds_Merchant_TransactionType: "A" o similar)
+    // Si es un tipo de transacción de autorización/alta, es exitosa, y no hay una acción de ciclo de vida específica (R,C,M).
+    // Esto cubre tanto el pago inicial que crea la suscripción como la notificación subsecuente
+    // que podría confirmar el ID de la cuenta de suscripción de Tefpay.
+    if (transactionType === "A" && isSuccess && !action) {
+      // El evento 'customer.subscription.created' debería ser manejado de forma idempotente:
+      // - Si la suscripción no existe, la crea.
+      // - Si ya existe (creada por una notificación previa sin Ds_Merchant_Subscription_Account),
+      //   la actualiza, especialmente para asegurar que el processor_subscription_id (Ds_Merchant_Subscription_Account)
+      //   esté registrado y el estado sea activo.
       return "customer.subscription.created";
     }
 
+    // Caso 2: Acciones explícitas del ciclo de vida de la suscripción (Ds_Merchant_Subscription_Action presente)
     if (action === "R") {
       // Renewal
-      return responseCode < 100
-        ? "invoice.payment_succeeded"
-        : "invoice.payment_failed";
+      return isSuccess
+        ? "invoice.payment_succeeded" // Renovación exitosa
+        : "invoice.payment_failed"; // Renovación fallida
     }
     if (action === "C") {
-      // Cancellation by user/system
+      // Cancellation by user/system via Tefpay
+      // Para cancelaciones, el Ds_Code podría no ser 100 (éxito), pero la acción 'C' es lo importante.
       return "customer.subscription.deleted";
     }
-    if (action === "M" && responseCode < 100) {
-      // Modification, could be an upgrade/downgrade or reactivation
-      // This might need more specific handling if different types of "M" exist
-      return "customer.subscription.updated"; // Generic update, or map to more specific if possible
+    if (action === "M" && isSuccess) {
+      // Modification (e.g., plan change, reactivation) confirmed by Tefpay
+      return "customer.subscription.updated";
     }
 
+    // Fallback para combinaciones no reconocidas
     this.logger.warn(
       `Could not map Tefpay notification to a known webhook event type: ${JSON.stringify(
         rawPayload
       )}`
     );
-    return "unknown.tefpay.event"; // Fallback for unhandled cases
+    return "unknown.tefpay.event";
   }
 
   private async processInitialPaymentEvent(
@@ -581,210 +620,209 @@ export class PaymentsService {
     auditEntryId: string,
     initialAuditDetails: any,
     storedNotificationId: string
-  ): Promise<void> {
-    const tefpayResultCode = merchantParams.Ds_Code as string; // Asegurar que Ds_Code se trata como string
-    const planId = this.getMetadataValue(paymentRecord.metadata, "plan_id");
-    const userId = paymentRecord.user_id;
+  ): Promise<string | undefined> {
+    return this.prisma.$transaction(async (tx) => {
+      let createdSubscriptionId: string | undefined = undefined;
+      const tefpayResultCode = merchantParams.Ds_Code as string;
+      const planId = this.getMetadataValue(paymentRecord.metadata, "plan_id");
+      const userId = paymentRecord.user_id;
 
-    if (!planId) {
-      this.logger.error(
-        `Plan ID not found in payment record metadata for payment ${paymentRecord.id}.`
-      );
-      await this.auditLogsService.update(auditEntryId, {
-        details: JSON.stringify(
-          this.formatMetadataField({
-            ...initialAuditDetails,
-            status: "ProcessingError",
-            error: "Plan ID missing.",
-          })
-        ),
-      });
-      await this.tefPayNotificationsService.updateNotificationProcessingStatus(
-        storedNotificationId,
-        TefPayNotificationStatus.ERROR,
-        paymentRecord.id,
-        undefined,
-        "Plan ID missing in payment metadata."
-      );
-      return;
-    }
-    const plan = await this.prisma.plan.findUnique({ where: { id: planId } });
-    if (!plan) {
-      await this.auditLogsService.update(auditEntryId, {
-        details: JSON.stringify(
-          this.formatMetadataField({
-            ...initialAuditDetails,
-            status: "ProcessingError",
-            error: `Plan ${planId} not found.`,
-          })
-        ),
-      });
-      await this.tefPayNotificationsService.updateNotificationProcessingStatus(
-        storedNotificationId,
-        TefPayNotificationStatus.ERROR,
-        paymentRecord.id,
-        undefined,
-        `Plan ${planId} not found.`
-      );
-      return;
-    }
+      if (!planId) {
+        this.logger.error(
+          `Plan ID not found in metadata for payment ${paymentRecord.id}. Cannot process initial payment event.`
+        );
+        await this.auditLogsService.update(
+          auditEntryId,
+          {
+            // action_status: "ERROR", // REMOVED
+            details: {
+              ...initialAuditDetails,
+              status: "ERROR", // ADDED status to details
+              error: "Plan ID not found in metadata",
+              notification_id: storedNotificationId,
+            },
+          },
+          tx
+        );
+        return;
+      }
+      const plan = await tx.plan.findUnique({ where: { id: planId } });
+      if (!plan) {
+        this.logger.error(
+          `Plan with ID ${planId} not found. Cannot process initial payment event for payment ${paymentRecord.id}.`
+        );
+        await this.auditLogsService.update(
+          auditEntryId,
+          {
+            // action_status: "ERROR", // REMOVED
+            details: {
+              ...initialAuditDetails,
+              status: "ERROR", // ADDED status to details
+              error: `Plan with ID ${planId} not found`,
+              notification_id: storedNotificationId,
+            },
+          },
+          tx
+        );
+        return;
+      }
 
-    const numericResultCode = parseInt(tefpayResultCode, 10);
+      const numericResultCode = parseInt(tefpayResultCode, 10);
 
-    // CORREGIDO: Comprobar si tefpayResultCode es un número válido y representa un código de éxito (0-199 para Tefpay)
-    if (
-      !isNaN(numericResultCode) &&
-      numericResultCode >= 0 &&
-      numericResultCode <= 199
-    ) {
-      await this.prisma.payment.update({
-        where: { id: paymentRecord.id },
-        data: {
-          status: PaymentStatus.COMPLETED,
-          processor_response: merchantParams as Prisma.InputJsonValue,
-          // Actualizar processor_payment_id con Ds_TransactionId si está disponible
-          // matching_data ya se estableció durante initiatePayment y no debe cambiar aquí.
-          processor_payment_id:
-            merchantParams.Ds_TransactionId || // CORREGIDO: Usar Ds_TransactionId
-            paymentRecord.processor_payment_id,
-        },
-      });
+      if (
+        !isNaN(numericResultCode) &&
+        numericResultCode >= 0 &&
+        numericResultCode <= 199
+      ) {
+        await tx.payment.update({
+          where: { id: paymentRecord.id },
+          data: {
+            status: PaymentStatus.COMPLETED,
+            processor_response: merchantParams as Prisma.InputJsonValue,
+            processor_payment_id:
+              merchantParams.Ds_TransactionId ||
+              paymentRecord.processor_payment_id,
+          },
+        });
 
-      if (plan.billing_interval && plan.billing_interval !== "once") {
-        const existingSubscription = paymentRecord.subscription_id
-          ? await this.prisma.subscription.findUnique({
-              where: { id: paymentRecord.subscription_id },
-            })
-          : null;
-
-        if (existingSubscription) {
-          this.logger.warn(
-            `User ${userId} already has subscription ${existingSubscription.id}. Payment ${paymentRecord.id} successful.`
-          );
-          await this.auditLogsService.update(auditEntryId, {
-            details: JSON.stringify(
-              this.formatMetadataField({
-                ...initialAuditDetails,
-                status: "ProcessedSuccessfullyWithExistingSubscription",
-                existing_subscription_id: existingSubscription.id,
+        if (plan.billing_interval && plan.billing_interval !== "once") {
+          const existingSubscription = paymentRecord.subscription_id
+            ? await tx.subscription.findUnique({
+                where: { id: paymentRecord.subscription_id },
               })
-            ),
-          });
-        } else {
-          try {
-            this.logger.log(
-              `[Debug Subscription ID] About to create subscription. Tefpay Ds_Merchant_Subscription_Account: '${merchantParams.Ds_Merchant_Subscription_Account}'`
+            : null;
+
+          if (existingSubscription) {
+            createdSubscriptionId = existingSubscription.id;
+            this.logger.warn(
+              `User ${userId} already has subscription ${existingSubscription.id}. Payment ${paymentRecord.id} successful, linked to existing subscription.`
             );
-            const subscription =
-              await this.subscriptionsService.createFromPayment({
-                user_id: userId,
-                plan_id: planId,
-                status: PrismaSubscriptionStatus.ACTIVE,
-                current_period_start: new Date(),
-                current_period_end: this.calculateNextBillingDate(
-                  new Date(),
-                  plan.billing_interval as "month" | "year"
-                ),
-                processor_subscription_id:
-                  merchantParams.Ds_Merchant_MatchingData || // Prioritize MatchingData for subscription ID if no specific Tefpay sub ID
-                  merchantParams.Ds_Merchant_Subscription_Account ||
-                  null,
-                // processor_transaction_id: // Este campo se refiere al ID de la transacción del PAGO que creó/renovó la suscripción
-                // El ID de la transacción del pago ya está en Payment.processor_payment_id
-                // Si se necesita una referencia específica de la transacción de Tefpay para la suscripción (distinta del pago),
-                // se podría añadir un nuevo campo a la tabla Subscription, ej. tefpay_subscription_transaction_ref
-                // Por ahora, asumimos que el ID de la transacción del pago es suficiente y se puede obtener a través de la relación Payment.
-                // Si Ds_Merchant_TransactionID está presente en merchantParams, es el ID de la transacción del pago.
-                payment_processor_name: "tefpay",
-                payment_id: paymentRecord.id,
-                metadata: this.formatMetadataField({
-                  source: "tefpay_initial_payment",
-                  original_payment_metadata:
-                    paymentRecord.metadata === null
-                      ? null
-                      : paymentRecord.metadata,
-                }) as Prisma.JsonObject,
+            await this.auditLogsService.update(
+              auditEntryId,
+              {
+                // action_status: "SUCCESS", // REMOVED
+                details: {
+                  ...initialAuditDetails,
+                  status: "SUCCESS", // ADDED status to details
+                  message:
+                    "Payment successful. Linked to existing subscription.",
+                  subscription_id: existingSubscription.id,
+                  notification_id: storedNotificationId,
+                },
+              },
+              tx
+            );
+          } else {
+            try {
+              const newSubscription =
+                await this.subscriptionsService.createFromPayment(
+                  {
+                    user_id: userId,
+                    plan_id: plan.id,
+                    payment_id: paymentRecord.id,
+                    processor_subscription_id:
+                      merchantParams.Ds_Merchant_Subscription_Account,
+                    status: PrismaSubscriptionStatus.ACTIVE,
+                    current_period_start: new Date(),
+                    current_period_end: this.calculateNextBillingDate(
+                      new Date(),
+                      plan.billing_interval as "month" | "year"
+                    ),
+                  },
+                  tx
+                );
+              createdSubscriptionId = newSubscription.id;
+
+              await tx.payment.update({
+                where: { id: paymentRecord.id },
+                data: { subscription_id: newSubscription.id },
               });
-            this.logger.log(
-              `Subscription ${subscription.id} created from payment ${paymentRecord.id}.`
-            );
-            await this.prisma.payment.update({
-              where: { id: paymentRecord.id },
-              data: { subscription_id: subscription.id },
-            });
-            await this.prisma.tefPayNotification.update({
-              where: { id: storedNotificationId },
-              data: { subscription_id: subscription.id },
-            });
-            await this.auditLogsService.update(auditEntryId, {
-              details: JSON.stringify(
-                this.formatMetadataField({
-                  ...initialAuditDetails,
-                  status: "ProcessedSuccessfully",
-                  subscription_created_id: subscription.id,
-                })
-              ),
-            });
-          } catch (subError: any) {
-            this.logger.error(
-              `Error creating subscription for payment ${paymentRecord.id}: ${subError.message}`
-            );
-            await this.auditLogsService.update(auditEntryId, {
-              details: JSON.stringify(
-                this.formatMetadataField({
-                  ...initialAuditDetails,
-                  status: "ProcessedSuccessfullyButSubscriptionFailed",
-                  subscription_error: subError.message,
-                })
-              ),
-            });
+
+              this.logger.log(
+                `New subscription ${newSubscription.id} created for user ${userId} from payment ${paymentRecord.id}.`
+              );
+              await this.auditLogsService.update(
+                auditEntryId,
+                {
+                  // action_status: "SUCCESS", // REMOVED
+                  details: {
+                    ...initialAuditDetails,
+                    status: "SUCCESS", // ADDED status to details
+                    message: "Payment successful. New subscription created.",
+                    subscription_id: newSubscription.id,
+                    notification_id: storedNotificationId,
+                  },
+                },
+                tx
+              );
+            } catch (error) {
+              this.logger.error(
+                `Error creating subscription for user ${userId} after payment ${paymentRecord.id}: ${error.message}`,
+                error.stack
+              );
+              await this.auditLogsService.update(
+                auditEntryId,
+                {
+                  // action_status: "ERROR", // REMOVED
+                  details: {
+                    ...initialAuditDetails,
+                    status: "ERROR", // ADDED status to details
+                    error: "Failed to create subscription after payment.",
+                    original_error: error.message,
+                    notification_id: storedNotificationId,
+                  },
+                },
+                tx
+              );
+            }
           }
+        } else {
+          this.logger.log(
+            `Payment ${paymentRecord.id} successful for a 'once' plan. No subscription created.`
+          );
+          await this.auditLogsService.update(
+            auditEntryId,
+            {
+              // action_status: "SUCCESS", // REMOVED
+              details: {
+                ...initialAuditDetails,
+                status: "SUCCESS", // ADDED status to details
+                message:
+                  "Payment successful for a 'once' plan. No subscription created.",
+                notification_id: storedNotificationId,
+              },
+            },
+            tx
+          );
         }
       } else {
-        this.logger.log(
-          `Payment ${paymentRecord.id} (non-subscription) processed successfully.`
+        this.logger.error(
+          `Payment ${paymentRecord.id} failed or was rejected by Tefpay. Result code: ${tefpayResultCode}`
         );
-        await this.auditLogsService.update(auditEntryId, {
-          details: JSON.stringify(
-            this.formatMetadataField({
-              ...initialAuditDetails,
-              status: "ProcessedSuccessNonSubscription",
-            })
-          ),
+        await tx.payment.update({
+          where: { id: paymentRecord.id },
+          data: {
+            status: PaymentStatus.FAILED,
+            processor_response: merchantParams as Prisma.InputJsonValue,
+          },
         });
+        await this.auditLogsService.update(
+          auditEntryId,
+          {
+            // action_status: "ERROR", // REMOVED
+            details: {
+              ...initialAuditDetails,
+              status: "ERROR", // ADDED status to details
+              error: "Payment failed or rejected by processor.",
+              processor_response: merchantParams,
+              notification_id: storedNotificationId,
+            },
+          },
+          tx
+        );
       }
-    } else {
-      // Payment failed
-      await this.prisma.payment.update({
-        where: { id: paymentRecord.id },
-        data: {
-          status: PaymentStatus.FAILED,
-          processor_response: merchantParams as Prisma.InputJsonValue,
-          processor_payment_id:
-            merchantParams.Ds_TransactionId || // CORREGIDO: Usar Ds_TransactionId
-            paymentRecord.processor_payment_id,
-        },
-      });
-      this.logger.warn(
-        `Payment ${paymentRecord.id} marked as FAILED. Tefpay code: ${tefpayResultCode}`
-      );
-      await this.auditLogsService.update(auditEntryId, {
-        details: JSON.stringify(
-          this.formatMetadataField({
-            ...initialAuditDetails,
-            status: "ProcessedWithFailure",
-            tefpay_response_code: tefpayResultCode,
-          })
-        ),
-      });
-      await this.tefPayNotificationsService.updateNotificationProcessingStatus(
-        storedNotificationId,
-        TefPayNotificationStatus.ERROR,
-        paymentRecord.id,
-        undefined,
-        `Payment failed with Tefpay code: ${tefpayResultCode}`
-      );
-    }
+      return createdSubscriptionId;
+    });
   }
 
   private async processSubscriptionLifecycleEvent(
@@ -902,18 +940,33 @@ export class PaymentsService {
       case "customer.subscription.created": {
         if (subscription) {
           this.logger.warn(
-            `Subscription ${subscription.id} already exists. Event: ${tefpayEvent.type}`
+            `Subscription ${subscription.id} already exists. Processing event ${tefpayEvent.type} to ensure data consistency.`
           );
+
+          const updateData: Prisma.SubscriptionUpdateInput = {
+            status: PrismaSubscriptionStatus.ACTIVE, // Ensure status is active
+            metadata: this.formatMetadataField({
+              ...(subscription.metadata as Prisma.JsonObject),
+              last_tefpay_event: tefpayEvent.type,
+              last_tefpay_event_id: tefpayEvent.id,
+            }),
+          };
+
+          // Ensure processor_subscription_id is updated if it's available in the event
+          // tefpaySubscriptionAccount is derived from tefpayEvent.data.object.subscription
+          if (
+            tefpaySubscriptionAccount &&
+            subscription.processor_subscription_id !== tefpaySubscriptionAccount
+          ) {
+            updateData.processor_subscription_id = tefpaySubscriptionAccount;
+            this.logger.log(
+              `Updating processor_subscription_id for subscription ${subscription.id} to ${tefpaySubscriptionAccount} based on event ${tefpayEvent.type}.`
+            );
+          }
+
           await this.prisma.subscription.update({
             where: { id: subscription.id },
-            data: {
-              status: PrismaSubscriptionStatus.ACTIVE,
-              metadata: this.formatMetadataField({
-                ...(subscription.metadata as Prisma.JsonObject),
-                last_tefpay_event: tefpayEvent.type,
-                last_tefpay_event_id: tefpayEvent.id,
-              }),
-            },
+            data: updateData,
           });
         } else {
           this.logger.log(

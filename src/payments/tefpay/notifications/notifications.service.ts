@@ -183,10 +183,10 @@ export class TefpayNotificationsService {
 
       // Emit a specific event for Tefpay notifications that are stored (and ideally verified)
       // PaymentsService or other relevant services will listen to this.
-      this.eventEmitter.emit(
-        "tefpay.notification.processed_by_handler",
-        storedNotificationPrisma // Send the Prisma object directly
-      );
+      this.eventEmitter.emit("tefpay.notification.processed_by_handler", {
+        notification: storedNotificationPrisma, // El objeto Prisma de la notificación almacenada
+        parsedData: incomingPayload, // El payload original analizado
+      });
 
       // Map Prisma entity to DTO for return, ensuring status is correctly mapped
       return {

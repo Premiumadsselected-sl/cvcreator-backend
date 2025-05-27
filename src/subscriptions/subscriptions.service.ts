@@ -1,5 +1,4 @@
 import {
-  Inject,
   Injectable,
   NotFoundException,
   BadRequestException,
@@ -8,7 +7,6 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateSubscriptionDto } from "./dto/create-subscription.dto";
 import { UpdateSubscriptionDto } from "./dto/update-subscription.dto";
-// MODIFICADO: Importar SubscriptionStatus directamente de @prisma/client
 import {
   Subscription,
   Prisma,
@@ -17,12 +15,11 @@ import {
 import {
   SubscriptionDto,
   SubscriptionStatus as DtoSubscriptionStatus,
-} from "./dto/subscription.dto"; // Renombrar el enum del DTO para evitar colisión
-import { AuditLogsService } from "../audit-logs/audit-logs.service"; // Importar AuditLogsService
-import { AuditAction } from "../audit-logs/dto/audit-action.enum"; // Importar AuditAction
-// import { TefpayService } from "../payments/tefpay/tefpay.service"; // ELIMINADO
-import { IPaymentProcessor } from "../payments/processors/payment-processor.interface";
-import { PAYMENT_PROCESSOR_TOKEN } from "../payments/payment-processor.token"; // AÑADIDO: Importar el token real
+} from "./dto/subscription.dto";
+import { AuditLogsService } from "../audit-logs/audit-logs.service";
+import { AuditAction } from "../audit-logs/dto/audit-action.enum";
+import { PaymentProcessorRegistryService } from "../payments/payment-processor-registry.service";
+import { SubscriptionCancellationResponse } from "../payments/processors/payment-processor.interface"; // AÑADIDO para tipar cancellationResponse
 
 // ADDED: Define a type for the createFromPayment method arguments
 interface CreateSubscriptionFromPaymentParams {
@@ -43,49 +40,52 @@ interface CreateSubscriptionFromPaymentParams {
 
 @Injectable()
 export class SubscriptionsService {
-  private readonly logger = new Logger(SubscriptionsService.name); // AÑADIDO
+  private readonly logger = new Logger(SubscriptionsService.name);
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly auditLogsService: AuditLogsService, // Inyectar AuditLogsService
-    @Inject(PAYMENT_PROCESSOR_TOKEN) // MODIFICADO: Usar el Symbol del token importado
-    private readonly paymentProcessor: IPaymentProcessor // AÑADIDO
+    private readonly auditLogsService: AuditLogsService,
+    private readonly registryService: PaymentProcessorRegistryService
   ) {}
 
   async create(
     createSubscriptionDto: CreateSubscriptionDto,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient // Existing optional transaction client
   ): Promise<Subscription> {
     const prismaClient = tx || this.prisma;
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { user_id, plan_id, payment_id, ...restInput } =
-      createSubscriptionDto; // payment_id desestructurado para excluirlo de 'restInput'
+      createSubscriptionDto;
     const data: Prisma.SubscriptionCreateInput = {
-      ...restInput, // 'restInput' ya no contiene payment_id
+      ...restInput,
       user: { connect: { id: user_id } },
       plan: { connect: { id: plan_id } },
-      status: PrismaSubscriptionStatus.PENDING, // MODIFICADO: Usar PrismaSubscriptionStatus directamente
+      status: PrismaSubscriptionStatus.PENDING,
     };
     const subscription = await prismaClient.subscription.create({ data });
 
-    // Crear log de auditoría
-    await this.auditLogsService.create({
-      user_id,
-      action: AuditAction.SUBSCRIPTION_CREATED,
-      target_type: "Subscription", // Corregido de entity a target_type
-      target_id: subscription.id, // Corregido de entity_id a target_id
-      details: JSON.stringify({ createSubscriptionDto }), // Convertir a string
-    });
+    await this.auditLogsService.create(
+      {
+        user_id,
+        action: AuditAction.SUBSCRIPTION_CREATED,
+        target_type: "Subscription",
+        target_id: subscription.id,
+        details: JSON.stringify({ createSubscriptionDto }),
+      },
+      prismaClient // Pass the prismaClient (which could be tx) to audit service
+    );
 
     return subscription;
   }
 
-  // ADDED: New method to create a subscription from a payment
   async createFromPayment(
     params: CreateSubscriptionFromPaymentParams,
-    tx?: Prisma.TransactionClient
+    // The 'tx' from params is for internal use if this method itself starts a transaction.
+    // The 'transactionClient' is passed from an external transaction (e.g., PaymentsService).
+    transactionClient?: Prisma.TransactionClient
   ): Promise<Subscription> {
-    const prismaClient = params.tx || tx || this.prisma;
+    // Prioritize externally passed transactionClient, then params.tx, then default prisma instance.
+    const prismaClient = transactionClient || params.tx || this.prisma;
     const {
       user_id,
       plan_id,
@@ -122,28 +122,31 @@ export class SubscriptionsService {
 
     const subscription = await prismaClient.subscription.create({ data });
 
-    await this.auditLogsService.create({
-      user_id,
-      action: AuditAction.SUBSCRIPTION_CREATED,
-      target_type: "Subscription",
-      target_id: subscription.id,
-      details: JSON.stringify({
-        plan_id,
-        status,
-        payment_id,
-        processor_transaction_id, // MODIFIED
-        processor_subscription_id, // MODIFIED
-        payment_processor_name, // ADDED
-        source: "createFromPayment",
-      }),
-    });
+    await this.auditLogsService.create(
+      {
+        user_id,
+        action: AuditAction.SUBSCRIPTION_CREATED,
+        target_type: "Subscription",
+        target_id: subscription.id,
+        details: JSON.stringify({
+          plan_id,
+          status,
+          payment_id,
+          processor_transaction_id,
+          processor_subscription_id,
+          payment_processor_name,
+          source: "createFromPayment",
+        }),
+      },
+      prismaClient // Pass the prismaClient to audit service
+    );
 
     return subscription;
   }
 
   async findByProcessorSubscriptionId(
     processorSubscriptionId: string,
-    tx?: Prisma.TransactionClient,
+    tx?: Prisma.TransactionClient, // Existing optional transaction client
     include?: Prisma.SubscriptionInclude
   ): Promise<(Subscription & { plan?: any }) | null> {
     const prismaClient = tx || this.prisma;
@@ -155,7 +158,7 @@ export class SubscriptionsService {
 
   async findActiveSubscriptionByUserId(
     userId: string,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient // Existing optional transaction client
   ): Promise<Subscription | null> {
     const prismaClient = tx || this.prisma;
     return prismaClient.subscription.findFirst({
@@ -179,8 +182,8 @@ export class SubscriptionsService {
 
   async findOne(
     id: string,
-    tx?: Prisma.TransactionClient,
-    include?: Prisma.SubscriptionInclude // Añadido parámetro include
+    tx?: Prisma.TransactionClient, // Existing optional transaction client
+    include?: Prisma.SubscriptionInclude
   ): Promise<(Subscription & { plan?: any }) | null> {
     // Tipo de retorno ajustado
     const prismaClient = tx || this.prisma;
@@ -194,7 +197,7 @@ export class SubscriptionsService {
   async update(
     id: string,
     updateSubscriptionDto: UpdateSubscriptionDto,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient // Existing optional transaction client
   ): Promise<Subscription> {
     const prismaClient = tx || this.prisma;
     const { metadata, status, ...rest } = updateSubscriptionDto;
@@ -214,33 +217,43 @@ export class SubscriptionsService {
 
     // Crear log de auditoría
     if (updatedSubscription.user_id) {
-      await this.auditLogsService.create({
-        user_id: updatedSubscription.user_id,
-        action: AuditAction.SUBSCRIPTION_UPDATED,
-        target_type: "Subscription", // Corregido de entity a target_type
-        target_id: updatedSubscription.id, // Corregido de entity_id a target_id
-        details: JSON.stringify({ updateSubscriptionDto }), // Convertir a string
-      });
+      await this.auditLogsService.create(
+        {
+          user_id: updatedSubscription.user_id,
+          action: AuditAction.SUBSCRIPTION_UPDATED,
+          target_type: "Subscription",
+          target_id: updatedSubscription.id,
+          details: JSON.stringify({ updateSubscriptionDto }),
+        },
+        prismaClient // Pass the prismaClient to audit service
+      );
     }
 
     return updatedSubscription;
   }
 
-  async remove(id: string, userId?: string): Promise<Subscription> {
-    // userId añadido opcionalmente para logging
-    const subscription = await this.prisma.subscription.delete({
+  async remove(
+    id: string,
+    userId?: string,
+    tx?: Prisma.TransactionClient
+  ): Promise<Subscription> {
+    // Added tx parameter
+    const prismaClient = tx || this.prisma;
+    const subscription = await prismaClient.subscription.delete({
       where: { id },
     });
 
-    // Crear log de auditoría
     if (userId || subscription.user_id) {
-      await this.auditLogsService.create({
-        user_id: userId || subscription.user_id,
-        action: AuditAction.SUBSCRIPTION_CANCELLED,
-        target_type: "Subscription", // Corregido de entity a target_type
-        target_id: subscription.id, // Corregido de entity_id a target_id
-        details: JSON.stringify({ id }), // Convertir a string
-      });
+      await this.auditLogsService.create(
+        {
+          user_id: userId || subscription.user_id,
+          action: AuditAction.SUBSCRIPTION_CANCELLED,
+          target_type: "Subscription",
+          target_id: subscription.id,
+          details: JSON.stringify({ id }),
+        },
+        prismaClient // Pass the prismaClient to audit service
+      );
     }
 
     return subscription;
@@ -248,10 +261,10 @@ export class SubscriptionsService {
 
   async updateStatus(
     subscriptionId: string,
-    status: PrismaSubscriptionStatus, // MODIFICADO: Usar PrismaSubscriptionStatus
+    status: PrismaSubscriptionStatus,
     updateData?: Partial<Prisma.SubscriptionUncheckedUpdateInput>,
-    tx?: Prisma.TransactionClient,
-    userId?: string // userId añadido opcionalmente para logging
+    tx?: Prisma.TransactionClient, // Existing optional transaction client
+    userId?: string
   ): Promise<Subscription | null> {
     const prismaClient = tx || this.prisma;
     const dataToUpdate: Prisma.SubscriptionUpdateInput = {
@@ -307,21 +320,24 @@ export class SubscriptionsService {
 
     // Crear log de auditoría
     if (updatedSubscription && (userId || updatedSubscription.user_id)) {
-      await this.auditLogsService.create({
-        user_id: userId || updatedSubscription.user_id,
-        action: AuditAction.SUBSCRIPTION_STATUS_CHANGED,
-        target_type: "Subscription", // Corregido de entity a target_type
-        target_id: updatedSubscription.id, // Corregido de entity_id a target_id
-        details: JSON.stringify({ status, updateData }), // Convertir a string
-      });
+      await this.auditLogsService.create(
+        {
+          user_id: userId || updatedSubscription.user_id,
+          action: AuditAction.SUBSCRIPTION_STATUS_CHANGED,
+          target_type: "Subscription",
+          target_id: updatedSubscription.id,
+          details: JSON.stringify({ status, updateData }),
+        },
+        prismaClient // Pass the prismaClient to audit service
+      );
     }
 
     return updatedSubscription;
   }
 
   async findByPaymentId(
-    orderIdentifier: string, // Este parece ser el ID de la suscripción, no del pago, según el uso.
-    tx?: Prisma.TransactionClient
+    orderIdentifier: string,
+    tx?: Prisma.TransactionClient // Existing optional transaction client
   ): Promise<Subscription | null> {
     const prismaClient = tx || this.prisma;
     // Intenta buscar por ID de suscripción directamente
@@ -348,7 +364,7 @@ export class SubscriptionsService {
     params: {
       user_id: string;
     },
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient // Existing optional transaction client
   ): Promise<Subscription | null> {
     const prismaClient = tx || this.prisma;
     const { user_id } = params;
@@ -364,7 +380,7 @@ export class SubscriptionsService {
 
   async isSubscriptionActive(
     userId: string,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient // Existing optional transaction client
   ): Promise<boolean> {
     const prismaClient = tx || this.prisma;
     // Asume que un usuario tiene como máximo una suscripción activa a la vez o que user_id es único.
@@ -391,7 +407,7 @@ export class SubscriptionsService {
 
   async findActiveByUserId(
     userId: string,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient // Existing optional transaction client
   ): Promise<Subscription | null> {
     const prismaClient = tx || this.prisma;
     return prismaClient.subscription.findFirst({
@@ -415,7 +431,7 @@ export class SubscriptionsService {
   // Este es el método que el controlador usará para obtener todas las suscripciones de un usuario.
   async findAllByUserId(
     userId: string,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient // Existing optional transaction client
   ): Promise<SubscriptionDto[]> {
     const prismaClient = tx || this.prisma;
     const subscriptions = await prismaClient.subscription.findMany({
@@ -461,13 +477,15 @@ export class SubscriptionsService {
   async requestUserSubscriptionCancellation(
     userId: string,
     subscriptionId: string,
-    cancellationReason?: string
+    cancellationReason?: string,
+    tx?: Prisma.TransactionClient // Added tx parameter
   ): Promise<Subscription> {
     this.logger.log(
       `User ${userId} requesting cancellation for subscription ${subscriptionId}. Reason: ${cancellationReason || "N/A"}`
     );
+    const prismaClient = tx || this.prisma;
 
-    const subscription = await this.prisma.subscription.findUnique({
+    const subscription = await prismaClient.subscription.findUnique({
       where: { id: subscriptionId },
     });
 
@@ -505,11 +523,11 @@ export class SubscriptionsService {
 
     if (subscription.processor_subscription_id) {
       // MODIFIED
-      const processorResponse = await this.paymentProcessor
-        .requestSubscriptionCancellation!({
-        processorSubscriptionId: subscription.processor_subscription_id, // MODIFIED
-        cancellationReason,
-      });
+      const processorResponse = await this.cancelSubscriptionAtProcessor(
+        subscriptionId,
+        subscription.processor_subscription_id,
+        cancellationReason
+      );
 
       if (!processorResponse.success) {
         this.logger.error(
@@ -530,7 +548,7 @@ export class SubscriptionsService {
 
     const cancelAtDate = new Date(subscription.current_period_end);
 
-    const updatedSubscription = await this.prisma.subscription.update({
+    const updatedSubscription = await prismaClient.subscription.update({
       where: { id: subscriptionId },
       data: {
         status: PrismaSubscriptionStatus.PENDING_CANCELLATION,
@@ -540,22 +558,164 @@ export class SubscriptionsService {
       },
     });
 
-    await this.auditLogsService.create({
-      user_id: userId,
-      action: AuditAction.SUBSCRIPTION_CANCELLATION_REQUESTED,
-      target_type: "Subscription",
-      target_id: updatedSubscription.id,
-      details: JSON.stringify({
-        subscriptionId,
-        cancellationReason,
-        cancelAtDate: cancelAtDate.toISOString(),
-      }),
-    });
+    await this.auditLogsService.create(
+      {
+        user_id: userId,
+        action: AuditAction.SUBSCRIPTION_CANCELLATION_REQUESTED,
+        target_type: "Subscription",
+        target_id: updatedSubscription.id,
+        details: JSON.stringify({
+          subscriptionId,
+          cancellationReason,
+          cancelAtDate: cancelAtDate.toISOString(),
+        }),
+      },
+      prismaClient // Pass the prismaClient to audit service
+    );
 
     this.logger.log(
       `Subscription ${subscriptionId} for user ${userId} has been set to 'pending_cancellation', effective on ${cancelAtDate.toISOString()}.`
     );
 
     return updatedSubscription;
+  }
+
+  // REVISAR: El siguiente método `cancelSubscriptionAtProcessor` es un ejemplo
+  // y necesita ser adaptado o eliminado si no existe o si la lógica es diferente.
+  // Este es un EJEMPLO de cómo se podría adaptar un método que antes usaba this.paymentProcessor
+  async cancelSubscriptionAtProcessor(
+    subscriptionId: string,
+    processorName: string,
+    cancellationReason?: string,
+    tx?: Prisma.TransactionClient // Added tx parameter
+  ): Promise<SubscriptionCancellationResponse> {
+    this.logger.log(
+      `Attempting to cancel subscription ${subscriptionId} at processor ${processorName}`
+    );
+    const prismaClient = tx || this.prisma;
+    const subscription = await prismaClient.subscription.findUnique({
+      where: { id: subscriptionId },
+    });
+
+    if (!subscription) {
+      throw new NotFoundException(
+        `Subscription with ID ${subscriptionId} not found.`
+      );
+    }
+
+    if (!subscription.processor_subscription_id) {
+      this.logger.warn(
+        `Subscription ${subscriptionId} does not have a processor_subscription_id. Cannot cancel at processor.`
+      );
+      throw new BadRequestException(
+        "La suscripción no tiene un identificador de procesador para cancelar."
+      );
+    }
+
+    // Determinar el nombre del procesador si no se proporciona explícitamente
+    // y está almacenado en la suscripción.
+    const actualProcessorName =
+      processorName || subscription.payment_processor_name;
+
+    if (!actualProcessorName) {
+      this.logger.error(
+        `Payment processor name not found for subscription ${subscriptionId}. Cannot determine which processor to use.`
+      );
+      throw new BadRequestException(
+        "No se pudo determinar el procesador de pagos para esta suscripción."
+      );
+    }
+
+    const paymentProcessor =
+      this.registryService.getProcessor(actualProcessorName);
+
+    if (!paymentProcessor) {
+      this.logger.error(
+        `Payment processor '${actualProcessorName}' not found or not enabled for subscription ${subscriptionId}.`
+      );
+      throw new NotFoundException(
+        `Servicio de procesador de pagos '${actualProcessorName}' no disponible.`
+      );
+    }
+
+    if (!paymentProcessor.requestSubscriptionCancellation) {
+      this.logger.warn(
+        `Payment processor '${actualProcessorName}' does not support requestSubscriptionCancellation method.`
+      );
+      throw new BadRequestException(
+        `El procesador de pagos '${actualProcessorName}' no admite la cancelación de suscripciones de esta manera.`
+      );
+    }
+
+    try {
+      const cancellationResponse: SubscriptionCancellationResponse =
+        await paymentProcessor.requestSubscriptionCancellation({
+          processorSubscriptionId: subscription.processor_subscription_id, // ELIMINADA aserción innecesaria
+          cancellationReason:
+            cancellationReason || "Cancelación solicitada por el usuario.",
+        });
+
+      this.logger.log(
+        `Subscription ${subscriptionId} (processor ID: ${subscription.processor_subscription_id}) cancellation requested at ${actualProcessorName}. Response: ${JSON.stringify(cancellationResponse)}`
+      );
+
+      const newMetadata = {
+        ...((subscription.metadata as Prisma.JsonObject) || {}),
+        cancellation_request_details:
+          cancellationResponse as unknown as Prisma.InputJsonValue,
+        cancelled_at_processor_attempted: new Date().toISOString(),
+      };
+
+      await this.updateStatus(
+        subscriptionId,
+        PrismaSubscriptionStatus.PENDING_CANCELLATION,
+        {
+          metadata: newMetadata,
+        },
+        prismaClient // Pass the prismaClient to updateStatus
+      );
+
+      await this.auditLogsService.create(
+        {
+          user_id: subscription.user_id,
+          action: AuditAction.SUBSCRIPTION_CANCELLATION_REQUESTED,
+          target_type: "Subscription",
+          target_id: subscription.id,
+          details: JSON.stringify({
+            processor: actualProcessorName,
+            processorSubscriptionId: subscription.processor_subscription_id,
+            reason: cancellationReason,
+            response: cancellationResponse,
+          }),
+        },
+        prismaClient // Pass the prismaClient to audit service
+      );
+
+      return cancellationResponse;
+    } catch (error) {
+      this.logger.error(
+        `Error cancelling subscription ${subscriptionId} at processor ${actualProcessorName}: ${error.message}`,
+        error.stack
+      );
+      await this.auditLogsService.create(
+        {
+          user_id: subscription.user_id,
+          action: AuditAction.SUBSCRIPTION_UPDATED,
+          target_type: "Subscription",
+          target_id: subscription.id,
+          details: JSON.stringify({
+            processor: actualProcessorName,
+            processorSubscriptionId: subscription.processor_subscription_id,
+            cancellation_attempt_failed: true,
+            reason: cancellationReason,
+            error: error.message,
+          }),
+        },
+        prismaClient // Pass the prismaClient to audit service
+      );
+      throw new BadRequestException(
+        `Error al solicitar la cancelación de la suscripción en el procesador: ${error.message}`
+      );
+    }
   }
 }

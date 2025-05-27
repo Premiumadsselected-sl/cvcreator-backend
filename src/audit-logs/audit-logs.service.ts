@@ -10,7 +10,10 @@ export class AuditLogsService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(createAuditLogDto: CreateAuditLogDto): Promise<AuditLog> {
+  async create(
+    createAuditLogDto: CreateAuditLogDto,
+    prismaClient: Prisma.TransactionClient | PrismaService = this.prisma
+  ): Promise<AuditLog> {
     const { details, ...restOfDto } = createAuditLogDto;
     const data: Prisma.AuditLogCreateInput = {
       ...restOfDto,
@@ -18,7 +21,8 @@ export class AuditLogsService {
     };
 
     try {
-      const auditLog = await this.prisma.auditLog.create({ data });
+      // Use the provided prismaClient (could be transaction client or default)
+      const auditLog = await prismaClient.auditLog.create({ data });
       return auditLog;
     } catch (error) {
       this.logger.error(
@@ -53,7 +57,8 @@ export class AuditLogsService {
 
   async update(
     id: string,
-    updateAuditLogDto: UpdateAuditLogDto
+    updateAuditLogDto: UpdateAuditLogDto,
+    prismaClient: Prisma.TransactionClient | PrismaService = this.prisma
   ): Promise<AuditLog> {
     const { details, ...restOfDto } = updateAuditLogDto;
     const data: Prisma.AuditLogUpdateInput = {
@@ -81,7 +86,8 @@ export class AuditLogsService {
     }
 
     try {
-      const updatedAuditLog = await this.prisma.auditLog.update({
+      // Use the provided prismaClient (could be transaction client or default)
+      const updatedAuditLog = await prismaClient.auditLog.update({
         where: { id },
         data,
       });

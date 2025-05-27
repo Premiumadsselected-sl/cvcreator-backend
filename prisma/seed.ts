@@ -73,7 +73,7 @@ async function main() {
     update: {
       price: trialPlanPrice,
       currency: trialPlanCurrency,
-      billing_interval: "month",
+      billing_interval: "day", // Modificado de "month" a "day"
       type: PlanType.TRIAL_PLAN,
       active: true,
       description: trialPlanDescription,
@@ -83,7 +83,7 @@ async function main() {
       name: trialPlanName,
       price: trialPlanPrice,
       currency: trialPlanCurrency,
-      billing_interval: "month",
+      billing_interval: "day", // Modificado de "month" a "day"
       type: PlanType.TRIAL_PLAN,
       active: true,
       description: trialPlanDescription,

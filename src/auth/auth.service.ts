@@ -31,7 +31,8 @@ export class AuthService {
    * @returns Promesa con AuthResponseDto (token y datos del usuario).
    */
   async register(registerUserDto: RegisterUserDto): Promise<AuthResponseDto> {
-    const { email, password, firstName, lastName, username } = registerUserDto;
+    const { email, password, firstName, lastName, username, locale } =
+      registerUserDto; // Añadir locale
     let userIdForAudit: string | undefined = undefined;
     let calculatedUserName: string | undefined = username;
 
@@ -87,6 +88,7 @@ export class AuthService {
       const createUserPayload: any = {
         email,
         password: hashedPassword,
+        locale: locale || "es", // Establecer locale, por defecto 'es'
       };
 
       if (calculatedUserName) {
@@ -114,7 +116,11 @@ export class AuthService {
         action: AuditAction.USER_REGISTERED, // Corregido: Usar USER_REGISTERED para éxito
         target_type: "User",
         target_id: newUser.id,
-        details: JSON.stringify({ email, username: calculatedUserName }),
+        details: JSON.stringify({
+          email,
+          username: calculatedUserName,
+          locale,
+        }), // Añadir locale al log
       });
 
       return {
@@ -129,6 +135,7 @@ export class AuthService {
         details: JSON.stringify({
           attemptedEmail: email, // Cambiado de 'email' a 'attemptedEmail'
           username: calculatedUserName, // Añadir username si está disponible
+          locale, // Añadir locale al log de error
           error: error.message,
         }),
       });

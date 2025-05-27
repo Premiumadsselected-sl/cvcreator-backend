@@ -65,7 +65,11 @@ El método `create` del `PaymentsService` también permite opcionalmente especif
 
 Actualmente, el único procesador de pago implementado es:
 
-- **Tefpay**: `TefpayService` (`src/payments/tefpay/tefpay.service.ts`) implementa `IPaymentProcessor` para interactuar con la pasarela de Tefpay.
+- **Tefpay**: `TefpayService` (`src/payments/tefpay/tefpay.service.ts`) implementa `IPaymentProcessor` para interactuar con la pasarela de Tefpay. Este servicio maneja la generación de parámetros para los formularios de pago y la verificación de notificaciones S2S, utilizando diferentes algoritmos de firma según la operación:
+  - **Firma para Formularios (Envío a Tefpay)**: Se utiliza SHA1 concatenando `Ds_Amount + Ds_Merchant_MerchantCode + Ds_Merchant_MatchingData + Ds_Merchant_Url + CLAVE_PRIVADA`.
+  - **Firma para Notificaciones S2S Comunes (Recepción desde Tefpay)**: Se utiliza SHA1 concatenando `Ds_Amount + Ds_Merchant_MerchantCode + Ds_Merchant_MatchingData + Ds_Merchant_Url + CLAVE_PRIVADA`.
+  - **Firma para Notificaciones S2S de Suscripción (Recepción desde Tefpay)**: Se utiliza SHA1 concatenando `Ds_Subscription_Action + Ds_Subscription_Status + Ds_Subscription_Account + Ds_Subscription_Id + CLAVE_PRIVADA`.
+  - **Firma para Operaciones S2S de Backoffice (Envío a Tefpay, ej. Cancelación)**: Se utiliza SHA256 concatenando `Ds_Merchant_MerchantCode + Ds_Merchant_Order + Ds_Merchant_Terminal + Ds_Amount + Ds_Currency + Ds_TransactionType + CLAVE_PRIVADA`.
 
 ## Configuración
 
@@ -86,7 +90,7 @@ Para cada procesador de pago, se requerirán variables de entorno específicas. 
 
 ## Flujo de Notificaciones (Webhook)
 
-El `PaymentsService` expone un método `handlePaymentNotification` que toma un `processorName` (ej. 'tefpay') y los datos de la notificación. Internamente, delega el manejo al servicio del procesador de pagos correspondiente (obtenido a través de la interfaz `IPaymentProcessor`).
+El `PaymentsService` expone un método `handlePaymentNotification` que toma un `processorName` (ej. \'tefpay\') y los datos de la notificación. Internamente, delega el manejo al servicio del procesador de pagos correspondiente. Para Tefpay, las notificaciones son primero manejadas por `TefpayNotificationsService` que almacena la notificación cruda y luego emite un evento que `PaymentsService` procesa.
 
 ### Servicios de Procesadores de Pago
 
@@ -132,8 +136,9 @@ sequenceDiagram
     User->>TefpayServer: Envía datos de pago
     TefpayServer-->>User: Resultado del pago (Redirección a URL_OK/URL_KO)
     TefpayServer->>BackendApp: Notificación Webhook POST /payments/tefpay/notifications (S2S)
-    BackendApp->>TefpayService: handleWebhookNotification(notificationData)
-    TefpayService->>TefpayService: verifySignature(notificationData)
+    BackendApp->>TefpayNotificationsService: storeRawNotification(payload)
+    TefpayNotificationsService->>PaymentsService: Event "tefpay.notification.processed_by_handler" (storedNotification)
+    PaymentsService->>TefpayService: verifyS2SSignature(rawPayload, signature) // Utiliza SHA1 para notificaciones entrantes
     alt Firma Válida
         TefpayService->>BackendApp: Procesa notificación (actualiza Payment, crea Subscription si aplica)
         BackendApp-->>TefpayServer: HTTP 200 OK
@@ -243,8 +248,7 @@ sequenceDiagram
     TefpayNotificationsService->>PrismaService: create(TefPayNotification {raw_notification, status: RECEIVED})
     PrismaService-->>TefpayNotificationsService: storedNotification
     TefpayNotificationsService->>PaymentsService: Event "tefpay.notification.processed_by_handler" (storedNotification)
-    PaymentsService->>PaymentsService: handleTefpayNotificationEvent(storedNotification)
-    PaymentsService->>TefpayService: verifyS2SSignature(rawPayload, signature)
+    PaymentsService->>TefpayService: verifyS2SSignature(rawPayload, signature) // Utiliza SHA1 para notificaciones entrantes
     alt Firma Inválida
         TefpayService-->>PaymentsService: false
         PaymentsService->>TefpayNotificationsService: updateNotificationProcessingStatus(SIGNATURE_FAILED)
@@ -320,14 +324,17 @@ sequenceDiagram
 5.  El frontend redirige al usuario a la pasarela de pago o envía el formulario.
 6.  El usuario completa el pago en la pasarela externa.
 7.  La pasarela de pago notifica al backend el resultado de la transacción a través de un webhook (ej. `POST /api/payments/tefpay/notifications`).
-8.  El servicio de notificaciones correspondiente (ej. `TefPayNotificationsService`) recibe la notificación, la verifica y luego emite un evento interno. `PaymentsService` escucha este evento y utiliza sus métodos (`handleInitialPaymentOrSubscriptionNotification` o `handleSubscriptionLifecycleNotification`) para procesar la notificación, actualizar el estado del `Payment`, crear o actualizar la `Subscription` asociada, y ajustar los roles del `User` si es necesario. Esta lógica incluye el manejo de pagos iniciales, renovaciones, cancelaciones y fallos de pago.
+8.  `TefpayNotificationsService` recibe la notificación, la almacena y emite un evento interno. `PaymentsService` escucha este evento.
+9.  `PaymentsService` invoca a `TefpayService` para verificar la firma de la notificación (SHA1 para notificaciones entrantes).
+10. Si la firma es válida, `PaymentsService` utiliza sus métodos (`handleInitialPaymentOrSubscriptionNotification` o `handleSubscriptionLifecycleNotification`) para procesar la notificación, actualizar el estado del `Payment`, crear o actualizar la `Subscription` asociada, y ajustar los roles del `User` si es necesario. Esta lógica incluye el manejo de pagos iniciales, renovaciones, cancelaciones y fallos de pago.
+11. Para operaciones iniciadas desde el backend hacia Tefpay (como una cancelación de suscripción), `TefpayService` generará una firma SHA256.
 
 ## Estado Actual y Mejoras Recientes
 
 La revisión exhaustiva del sistema de pagos, notificaciones (especialmente Tefpay), y la lógica de suscripciones y planes ha sido completada, abordando varios puntos críticos. Las mejoras y correcciones clave incluyen:
 
-- **Verificación de Firmas de Webhooks**: Se ha implementado y validado la correcta verificación de las firmas S2S para las notificaciones de Tefpay, asegurando la autenticidad de los mensajes.
-- **Manejo Detallado de Escenarios de Notificación**: Se ha refinado la lógica en `PaymentsService` para manejar diversos escenarios de notificación a través de los métodos `handleInitialPaymentOrSubscriptionNotification` y `handleSubscriptionLifecycleNotification`. Esto incluye:
+- **Verificación de Firmas de Webhooks**: Se ha implementado y validado la correcta verificación de las firmas S2S para las notificaciones de Tefpay, asegurando la autenticidad de los mensajes. Se utilizan diferentes algoritmos de firma según el contexto: SHA1 para la mayoría de las notificaciones entrantes y SHA256 para operaciones de backoffice salientes.
+- **Manejo Detallado de Escenarios de Notificación**: Se ha refinado la lógica en `PaymentsService` para manejar diversos escenarios de notificación a través de los métodos `handleInitialPaymentOrSubscriptionNotification` y `handleSubscriptionLifecycleNotification`, coordinándose con `TefpayNotificationsService` para la recepción y almacenamiento inicial de las notificaciones. Esto incluye:
   - La correcta creación y activación de suscripciones tras un pago inicial exitoso.
   - La gestión de renovaciones de suscripción, incluyendo el manejo de pagos fallidos y la posible transición de suscripciones a estados como `past_due` o `canceled`.
   - El procesamiento de cancelaciones de suscripción iniciadas por el usuario o por el sistema.

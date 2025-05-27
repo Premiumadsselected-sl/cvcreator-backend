@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="{{i18n.email_lang_code}}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{i18n.welcome_subject}}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; color: #333; }
+        .container { background-color: #f9f9f9; padding: 20px; border-radius: 5px; }
+        .header { color: #444; font-size: 24px; margin-bottom: 20px; }
+        .content p { line-height: 1.6; }
+        .button { background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin-top: 15px; }
+        .footer { margin-top: 20px; font-size: 12px; color: #777; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">{{i18n.welcome_greeting}}</div>
+        <div class="content">
+            <p>{{i18n.welcome_body_1}}</p>
+            <p>{{i18n.welcome_body_2}}</p>
+            <p>{{i18n.welcome_body_3}}</p>
+            <a href="{{appBaseUrl}}/login" class="button">{{i18n.email_button_login}}</a>
+            <p>{{i18n.welcome_body_4}}</p>
+        </div>
+        <div class="footer">
+            <p>{{i18n.email_footer_sent_by}}</p>
+            <p>{{i18n.email_footer_support}}</p>
+            <p>&copy; {{#if (lookup @root 'year')}}{{year}}{{else}}{{new Date().getFullYear()}}{{/if}} {{serviceName}}. {{i18n.email_footer_rights}}</p>
+        </div>
+    </div>
+</body>
+</html>

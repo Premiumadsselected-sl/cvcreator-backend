@@ -25,9 +25,12 @@ Las siguientes variables de entorno deben estar configuradas correctamente:
 ## Flujo de Notificación (Webhook S2S)
 
 1.  **Recepción de Notificación**: El endpoint `/api/payments/tefpay/notifications` recibe las notificaciones HTTP POST de Tefpay.
-2.  **Almacenamiento Inicial**: La notificación cruda se almacena en la tabla `TefPayNotification` con un estado inicial (ej. `pending_verification`).
-3.  **Verificación de la Firma**: El `TefpayService`, a través de su método `verifySignature`, comprueba la autenticidad de la notificación usando la `TEFPAY_SECRET_KEY`.
-4.  **Procesamiento**: Si la firma es válida, el `TefpayService` (implementando `IPaymentProcessor`) procesa la notificación. Esto implica:
+2.  **Almacenamiento Inicial**: `TefpayNotificationsService` almacena la notificación cruda en la tabla `TefPayNotification` con un estado inicial (ej. `RECEIVED`).
+3.  **Emisión de Evento**: `TefpayNotificationsService` emite un evento interno (ej. `tefpay.notification.processed_by_handler`) con la notificación almacenada.
+4.  **Manejo Asíncrono y Verificación de Firma**: Un listener de eventos en `PaymentsService` (`handleTefpayNotificationEvent`) recibe el evento. Este servicio luego invoca a `TefpayService` para verificar la firma de la notificación.
+    - Para **notificaciones S2S comunes** (pagos, etc.), `TefpayService` utiliza **SHA1** con la `TEFPAY_SECRET_KEY` y los campos: `Ds_Amount + Ds_Merchant_MerchantCode + Ds_Merchant_MatchingData + Ds_Merchant_Url + CLAVE_PRIVADA`.
+    - Para **notificaciones S2S de suscripción**, `TefpayService` utiliza **SHA1** con la `TEFPAY_SECRET_KEY` y los campos: `Ds_Subscription_Action + Ds_Subscription_Status + Ds_Subscription_Account + Ds_Subscription_Id + CLAVE_PRIVADA`.
+5.  **Procesamiento**: Si la firma es válida, el `PaymentsService` procesa la notificación. Esto implica:
     - Actualizar el estado del `Payment` correspondiente en la base de datos.
     - Si el pago es para una nueva suscripción y es exitoso, se llama a `SubscriptionsService.createFromPayment` para crear la `Subscription`.
     - Manejar otros tipos de notificaciones (cancelaciones, renovaciones, etc.).
@@ -58,13 +61,17 @@ Las siguientes variables de entorno deben estar configuradas correctamente:
 - **No exponer `TEFPAY_SECRET_KEY`**: Esta clave debe mantenerse secreta y nunca exponerse en el lado del cliente ni en logs públicos.
 - **HTTPS**: Asegúrate de que el endpoint de notificaciones siempre use HTTPS.
 - **Validación de IP (Opcional pero Recomendado)**: Considera validar que las notificaciones provengan de las direcciones IP de Tefpay si proporcionan una lista.
+- **Algoritmos de Firma**: Es crucial utilizar el algoritmo de firma correcto para cada tipo de interacción con Tefpay:
+  - **SHA1** para la firma de formularios enviados a Tefpay.
+  - **SHA1** para la verificación de notificaciones S2S entrantes (comunes y de suscripción).
+  - **SHA256** para la firma de operaciones S2S de backoffice enviadas a Tefpay (ej. cancelación de suscripción).
 
 ## Estado Actual y Mejoras Recientes
 
-La gestión de notificaciones de Tefpay, incluyendo la verificación de firma S2S, ha sido revisada y mejorada como parte de una actualización más amplia del sistema de pagos y suscripciones. Los puntos clave son:
+La gestión de notificaciones de Tefpay, incluyendo la verificación de firma S2S, ha sido revisada y mejorada. Los puntos clave son:
 
-- **Verificación S2S Funcional**: La lógica de `TefpayService.verifyS2SSignature` ha sido confirmada y es funcional, asegurando que solo las notificaciones auténticas de Tefpay sean procesadas.
-- **Flujo de Procesamiento Clarificado**: El flujo desde la recepción de la notificación, pasando por el almacenamiento inicial, la emisión de un evento, y el manejo asíncrono en `PaymentsService` (específicamente en `handleInitialPaymentOrSubscriptionNotification` y `handleSubscriptionLifecycleNotification`), está ahora bien definido.
+- **Verificación S2S Funcional**: La lógica de `TefpayService.verifyS2SSignature` ha sido confirmada y es funcional, utilizando SHA1 para las notificaciones entrantes y asegurando que solo las notificaciones auténticas de Tefpay sean procesadas.
+- **Flujo de Procesamiento Clarificado**: El flujo desde la recepción de la notificación por `TefpayNotificationsService`, pasando por el almacenamiento inicial, la emisión de un evento, y el manejo asíncrono en `PaymentsService` (específicamente en `handleInitialPaymentOrSubscriptionNotification` y `handleSubscriptionLifecycleNotification`), está ahora bien definido.
 - **Manejo de Errores de Firma**: Las notificaciones con firmas inválidas o ausentes son correctamente marcadas (`signature_failed`) y no se procesan, previniendo acciones no deseadas.
 - **Integración con `PaymentsService`**: `PaymentsService` ahora maneja de forma robusta los resultados de las notificaciones verificadas para actualizar pagos, suscripciones y usuarios de manera atómica usando `prisma.$transaction`.
 - **Resolución de Problemas de Dependencias**: Las correcciones en las dependencias de módulos (`PaymentsModule` y `SubscriptionsModule` usando `forwardRef`) aseguran que todos los servicios necesarios estén disponibles y correctamente inyectados, lo cual es fundamental para el flujo de procesamiento de notificaciones que interactúa con múltiples dominios.

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="{{locale}}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{subject_email}}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; color: #333; }
+        .container { background-color: #f9f9f9; padding: 20px; border-radius: 5px; }
+        .header { color: #d9534f; font-size: 24px; margin-bottom: 20px; }
+        .content p { line-height: 1.6; }
+        .footer { margin-top: 20px; font-size: 12px; color: #777; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">Problema con tu Pago - {{serviceName}}</div>
+        <div class="content">
+            <p>Hola {{userName}},</p>
+            <p>Hemos encontrado un problema al procesar el pago de tu suscripción al plan <strong>{{planName}}</strong> en {{serviceName}}.</p>
+            {{#if nextPaymentAttemptDate}}
+            <p>Realizaremos un nuevo intento de cobro el día {{nextPaymentAttemptDate}}.</p>
+            {{/if}}
+            <p>Por favor, asegúrate de que los detalles de tu método de pago estén actualizados. Puedes revisarlos y actualizarlos en la sección de facturación de tu cuenta:</p>
+            <p><a href="{{appBaseUrl}}/billing">Actualizar Método de Pago</a></p>
+            <p>Si el problema persiste o tienes alguna pregunta, por favor contacta a nuestro equipo de soporte en <a href="mailto:{{supportEmail}}">{{supportEmail}}</a>.</p>
+        </div>
+        <div class="footer">
+            <p>&copy; {{#if (lookup @root 'year')}}{{year}}{{else}}{{new Date().getFullYear()}}{{/if}} {{serviceName}}. Todos los derechos reservados.</p>
+        </div>
+    </div>
+</body>
+</html>

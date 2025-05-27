@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="{{locale}}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{subject_email}}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; color: #333; }
+        .container { background-color: #f9f9f9; padding: 20px; border-radius: 5px; }
+        .header { color: #444; font-size: 24px; margin-bottom: 20px; }
+        .content p { line-height: 1.6; }
+        .footer { margin-top: 20px; font-size: 12px; color: #777; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">Confirmación de Suscripción: {{planName}}</div>
+        <div class="content">
+            <p>Hola {{userName}},</p>
+            <p>Tu suscripción al plan <strong>{{planName}}</strong> en {{serviceName}} ha sido confirmada y activada.</p>
+            <p>Ahora puedes disfrutar de todas las ventajas y características de tu nuevo plan.</p>
+            <p>Para gestionar tu suscripción o explorar más, visita tu panel de control en <a href="{{appBaseUrl}}">{{appBaseUrl}}</a>.</p>
+            <p>Si tienes alguna pregunta, contacta a nuestro soporte en <a href="mailto:{{supportEmail}}">{{supportEmail}}</a>.</p>
+        </div>
+        <div class="footer">
+            <p>&copy; {{#if (lookup @root 'year')}}{{year}}{{else}}{{new Date().getFullYear()}}{{/if}} {{serviceName}}. Todos los derechos reservados.</p>
+        </div>
+    </div>
+</body>
+</html>
