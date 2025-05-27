@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 async function main() {
   // Leer variables de entorno para los planes
   const trialPlanName = process.env.TRIAL_PLAN_NAME || "Trial";
-  const trialPlanPrice = parseFloat(process.env.TRIAL_PLAN_PRICE || "0");
+  const trialPlanPrice = parseFloat(process.env.TRIAL_PLAN_PRICE || "60");
   const trialPlanCurrency = process.env.TRIAL_PLAN_CURRENCY || "EUR";
   const trialPlanDescription =
     process.env.TRIAL_PLAN_DESCRIPTION ||
@@ -20,7 +20,7 @@ async function main() {
 
   const standardPlanName = process.env.STANDARD_PLAN_NAME || "Standard";
   const standardPlanPrice = parseFloat(
-    process.env.STANDARD_PLAN_PRICE || "49.99"
+    process.env.STANDARD_PLAN_PRICE || "4999"
   );
   const standardPlanCurrency = process.env.STANDARD_PLAN_CURRENCY || "EUR";
   const standardPlanDescription =
@@ -36,9 +36,7 @@ async function main() {
   );
 
   const premiumPlanName = process.env.PREMIUM_PLAN_NAME || "Premium";
-  const premiumPlanPrice = parseFloat(
-    process.env.PREMIUM_PLAN_PRICE || "99.99"
-  );
+  const premiumPlanPrice = parseFloat(process.env.PREMIUM_PLAN_PRICE || "9999");
   const premiumPlanCurrency = process.env.PREMIUM_PLAN_CURRENCY || "EUR";
   const premiumPlanDescription =
     process.env.PREMIUM_PLAN_DESCRIPTION ||
@@ -49,6 +47,23 @@ async function main() {
       "Plantillas Premium",
       "Soporte prioritario",
       "Analíticas Avanzadas",
+    ]
+  );
+
+  const enterprisePlanName = process.env.ENTERPRISE_PLAN_NAME || "Enterprise";
+  const enterprisePlanPrice = parseFloat(
+    process.env.ENTERPRISE_PLAN_PRICE || "19999"
+  );
+  const enterprisePlanCurrency = process.env.ENTERPRISE_PLAN_CURRENCY || "EUR";
+  const enterprisePlanDescription =
+    process.env.ENTERPRISE_PLAN_DESCRIPTION ||
+    "Plan Enterprise con funcionalidades avanzadas y soporte personalizado.";
+  const enterprisePlanFeatures = JSON.stringify(
+    process.env.ENTERPRISE_PLAN_FEATURES?.split(",").map((f) => f.trim()) || [
+      "Todas las funciones del plan Premium",
+      "Soporte personalizado",
+      "Integraciones avanzadas",
+      "Analíticas empresariales",
     ]
   );
 
@@ -136,38 +151,25 @@ async function main() {
   const enterprisePlan = await prisma.plan.upsert({
     where: { name: "Enterprise" },
     update: {
-      price: 199.99,
-      currency: "EUR",
-      billing_interval: "year",
+      price: enterprisePlanPrice,
+      currency: enterprisePlanCurrency,
+      billing_interval: "month",
       type: PlanType.ENTERPRISE_PLAN,
       active: true,
-      description:
-        "Plan Enterprise con funcionalidades avanzadas y soporte personalizado.",
-      features: JSON.stringify([
-        "Todas las funciones del plan Premium",
-        "Soporte personalizado",
-        "Integraciones avanzadas",
-        "Analíticas empresariales",
-      ]),
+      description: enterprisePlanDescription,
+      features: enterprisePlanFeatures,
     },
     create: {
-      name: "Enterprise",
-      price: 199.99,
-      currency: "EUR",
-      billing_interval: "year",
+      name: enterprisePlanName,
+      price: enterprisePlanPrice,
+      currency: enterprisePlanCurrency,
+      billing_interval: "month",
       type: PlanType.ENTERPRISE_PLAN,
       active: true,
-      description:
-        "Plan Enterprise con funcionalidades avanzadas y soporte personalizado.",
-      features: JSON.stringify([
-        "Todas las funciones del plan Premium",
-        "Soporte personalizado",
-        "Integraciones avanzadas",
-        "Analíticas empresariales",
-      ]),
+      description: enterprisePlanDescription,
+      features: enterprisePlanFeatures,
     },
   });
-
   console.log(
     `Created/updated plan: ${enterprisePlan.name} (ID: ${enterprisePlan.id})`
   );

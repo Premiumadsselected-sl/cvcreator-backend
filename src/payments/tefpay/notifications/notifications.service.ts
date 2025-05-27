@@ -77,42 +77,44 @@ export class TefpayNotificationsService {
       "payment_id" | "subscription_id" | "processing_notes"
     > = {
       id: notificationId,
-      Ds_Amount: incomingPayload.Ds_Amount, // Corrected: Ds_Amount
-      Ds_Merchant_MatchingData: incomingPayload.Ds_Merchant_MatchingData, // Corrected
-      Ds_AuthorisationCode: incomingPayload.Ds_AuthorisationCode, // Corrected
-      Ds_Bank: incomingPayload.Ds_Bank, // Corrected (assuming Ds_Bank is in DTO)
-      Ds_Merchant_TransactionType: incomingPayload.Ds_Merchant_TransactionType, // Corrected
-      Ds_Message: incomingPayload.Ds_Message, // Corrected
-      Ds_Code: incomingPayload.Ds_Code, // Corrected
-      Ds_PanMask: incomingPayload.Ds_PanMask, // Corrected (assuming Ds_PanMask is in DTO)
-      Ds_Expiry: incomingPayload.Ds_Expiry, // Corrected (assuming Ds_Expiry is in DTO)
-      Ds_Date: incomingPayload.Ds_Date, // Corrected
-      Ds_Merchant_MerchantCode: incomingPayload.Ds_Merchant_MerchantCode, // Corrected
-      Ds_Merchant_Guarantees: incomingPayload.Ds_Merchant_Guarantees, // Corrected (assuming Ds_Merchant_Guarantees is in DTO)
-      Ds_Signature: incomingPayload.Ds_Signature, // Corrected
-      Ds_Merchant_TransactionID: incomingPayload.Ds_Merchant_TransactionID, // Corrected (assuming Ds_Merchant_TransactionID is in DTO)
+      // Campos del DTO - deben coincidir con la definición de TefPayNotificationDto
+      ds_Order: incomingPayload.Ds_Order,
+      Ds_Amount: incomingPayload.Ds_Amount,
+      Ds_Merchant_MatchingData: incomingPayload.Ds_Merchant_MatchingData,
+      Ds_AuthorisationCode: incomingPayload.Ds_AuthorisationCode,
+      Ds_Bank: incomingPayload.Ds_Bank,
+      Ds_Merchant_TransactionType: incomingPayload.Ds_Merchant_TransactionType,
+      Ds_Message: incomingPayload.Ds_Message,
+      Ds_Code: incomingPayload.Ds_Code,
+      Ds_PanMask: incomingPayload.Ds_PanMask,
+      Ds_Expiry: incomingPayload.Ds_Expiry,
+      Ds_Date: incomingPayload.Ds_Date,
+      // Ds_Hour, Ds_SecurePayment, Ds_Card_Type, Ds_Card_Country NO están en el DTO, se guardarán en raw_notification y directamente en Prisma
+      Ds_Merchant_MerchantCode: incomingPayload.Ds_Merchant_MerchantCode,
+      Ds_Merchant_Guarantees: incomingPayload.Ds_Merchant_Guarantees,
+      Ds_Signature: incomingPayload.Ds_Signature,
+      Ds_Merchant_TransactionID: incomingPayload.Ds_Merchant_TransactionID,
       Ds_Merchant_Subscription_Account:
-        incomingPayload.Ds_Merchant_Subscription_Account, // Corrected
+        incomingPayload.Ds_Merchant_Subscription_Account,
       Ds_Merchant_Subscription_Action:
-        incomingPayload.Ds_Merchant_Subscription_Action, // Corrected
-      Ds_Merchant_Terminal: incomingPayload.Ds_Merchant_Terminal, // Corrected
-      Ds_Currency: incomingPayload.Ds_Currency, // Corrected
+        incomingPayload.Ds_Merchant_Subscription_Action,
+      Ds_Merchant_Terminal: incomingPayload.Ds_Merchant_Terminal,
+      Ds_Currency: incomingPayload.Ds_Currency,
       Ds_CostumerCreditCardCountry:
-        incomingPayload.Ds_CostumerCreditCardCountry, // Corrected (assuming Ds_CostumerCreditCardCountry is in DTO)
-      Ds_CostumerCreditCardBrand: incomingPayload.Ds_CostumerCreditCardBrand, // Corrected (assuming Ds_CostumerCreditCardBrand is in DTO)
-      Ds_CostumerCreditCardType: incomingPayload.Ds_CostumerCreditCardType, // Corrected (assuming Ds_CostumerCreditCardType is in DTO)
+        incomingPayload.Ds_CostumerCreditCardCountry,
+      Ds_CostumerCreditCardBrand: incomingPayload.Ds_CostumerCreditCardBrand,
+      Ds_CostumerCreditCardType: incomingPayload.Ds_CostumerCreditCardType,
       Ds_CostumerCreditCardExpiryDate:
-        incomingPayload.Ds_CostumerCreditCardExpiryDate, // Corrected (assuming Ds_CostumerCreditCardExpiryDate is in DTO)
-      Ds_CostumerCreditCardId: incomingPayload.Ds_CostumerCreditCardId, // Corrected (assuming Ds_CostumerCreditCardId is in DTO)
-      Ds_CostumerCreditCardBin: incomingPayload.Ds_CostumerCreditCardBin, // Corrected (assuming Ds_CostumerCreditCardBin is in DTO)
-      Ds_Merchant_UserName: incomingPayload.Ds_Merchant_UserName, // Corrected (assuming Ds_Merchant_UserName is in DTO)
-      ds_Order: incomingPayload.Ds_Order, // Corrected
-      ds_TransactionDate: incomingPayload.Ds_TransactionDate, // Corrected (assuming Ds_TransactionDate is in DTO)
-      ds_ClientRef: incomingPayload.Ds_ClientRef, // Corrected (assuming Ds_ClientRef is in DTO)
-      ds_CodeBank: incomingPayload.Ds_CodeBank, // Corrected (assuming Ds_CodeBank is in DTO)
-      ds_Merchant_Url: incomingPayload.Ds_Merchant_Url, // Corrected (assuming Ds_Merchant_Url is in DTO)
-      raw_notification: incomingPayload as any, // Store the entire incoming payload
-      status: DtoTefPayNotificationStatus.RECEIVED, // Initial status using DTO enum
+        incomingPayload.Ds_CostumerCreditCardExpiryDate,
+      Ds_CostumerCreditCardId: incomingPayload.Ds_CostumerCreditCardId,
+      Ds_CostumerCreditCardBin: incomingPayload.Ds_CostumerCreditCardBin,
+      Ds_Merchant_UserName: incomingPayload.Ds_Merchant_UserName,
+      ds_TransactionDate: incomingPayload.Ds_TransactionDate,
+      ds_ClientRef: incomingPayload.Ds_ClientRef,
+      ds_CodeBank: incomingPayload.Ds_CodeBank,
+      ds_Merchant_Url: incomingPayload.Ds_Merchant_Url,
+      raw_notification: incomingPayload as any,
+      status: DtoTefPayNotificationStatus.RECEIVED,
       createdAt: now,
       updatedAt: now,
     };
@@ -122,20 +124,23 @@ export class TefpayNotificationsService {
         await this.prisma.tefPayNotification.create({
           data: {
             id: notificationId,
+            // Campos de Prisma - asegurar que coinciden con el esquema y el payload
+            // Todos los campos Ds_* del payload deben mapearse a los campos ds_* en Prisma
             ds_Order: incomingPayload.Ds_Order,
             ds_Code: incomingPayload.Ds_Code,
             ds_Message: incomingPayload.Ds_Message,
             ds_Merchant_MatchingData: incomingPayload.Ds_Merchant_MatchingData,
             ds_Date: incomingPayload.Ds_Date,
             ds_Hour: incomingPayload.Ds_Hour,
-            ds_SecurePayment: incomingPayload.Ds_SecurePayment,
+            ds_SecurePayment:
+              incomingPayload.Ds_SecurePayment || incomingPayload.Ds_Secure, // Fallback para Ds_Secure si Ds_SecurePayment no está
             ds_Card_Type: incomingPayload.Ds_Card_Type,
             ds_Card_Country: incomingPayload.Ds_Card_Country,
             ds_AuthorisationCode: incomingPayload.Ds_AuthorisationCode,
             ds_Merchant_TransactionType:
               incomingPayload.Ds_Merchant_TransactionType,
             ds_Merchant_MerchantCode: incomingPayload.Ds_Merchant_MerchantCode,
-            ds_Merchant_Terminal: incomingPayload.Ds_Terminal, // Mapeo de Ds_Terminal a ds_Merchant_Terminal
+            ds_Merchant_Terminal: incomingPayload.Ds_Merchant_Terminal,
             ds_Amount: incomingPayload.Ds_Amount,
             ds_Currency: incomingPayload.Ds_Currency,
             ds_Signature: incomingPayload.Ds_Signature,
@@ -145,11 +150,29 @@ export class TefpayNotificationsService {
               incomingPayload.Ds_Merchant_Subscription_Action,
             ds_Merchant_Url: incomingPayload.Ds_Merchant_Url,
             ds_CodeBank: incomingPayload.Ds_CodeBank,
-            ds_TransactionDate: incomingPayload.Ds_TransactionDate, // Asumiendo que viene en el payload como Ds_TransactionDate
-            ds_ClientRef: incomingPayload.Ds_ClientRef, // Asumiendo que viene en el payload como Ds_ClientRef
-
-            raw_notification: incomingPayload as any, // Store the entire incoming payload
-            status: TefPayNotificationStatus.RECEIVED, // Use direct import
+            ds_TransactionDate: incomingPayload.Ds_TransactionDate,
+            ds_ClientRef: incomingPayload.Ds_ClientRef,
+            // CORREGIDO: Mapear Ds_TransactionId del payload a ds_Merchant_TransactionID en Prisma
+            ds_Merchant_TransactionID: incomingPayload.Ds_TransactionId,
+            ds_PanMask: incomingPayload.Ds_PanMask,
+            ds_Expiry: incomingPayload.Ds_Expiry,
+            ds_Bank: incomingPayload.Ds_Bank,
+            ds_Merchant_Guarantees: incomingPayload.Ds_Merchant_Guarantees,
+            ds_CostumerCreditCardCountry:
+              incomingPayload.Ds_CostumerCreditCardCountry,
+            // CORREGIDO: Mapear Ds_Card_Brand del payload a ds_CostumerCreditCardBrand en Prisma
+            ds_CostumerCreditCardBrand:
+              incomingPayload.Ds_CostumerCreditCardBrand ||
+              incomingPayload.Ds_Card_Brand,
+            ds_CostumerCreditCardType:
+              incomingPayload.Ds_CostumerCreditCardType,
+            ds_CostumerCreditCardExpiryDate:
+              incomingPayload.Ds_CostumerCreditCardExpiryDate,
+            ds_CostumerCreditCardId: incomingPayload.Ds_CostumerCreditCardId,
+            ds_CostumerCreditCardBin: incomingPayload.Ds_CostumerCreditCardBin,
+            ds_Merchant_UserName: incomingPayload.Ds_Merchant_UserName,
+            raw_notification: incomingPayload as any,
+            status: TefPayNotificationStatus.RECEIVED,
             createdAt: now,
             updatedAt: now,
           } as any,

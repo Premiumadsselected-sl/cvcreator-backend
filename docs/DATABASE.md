@@ -94,6 +94,33 @@ Representa la suscripción de un usuario a un plan.
   - Muchos a uno con `Plan`.
   - Uno a muchos con `Payment`, `TefPayNotification`.
 
+### Tabla `Subscription`
+
+| Campo                     | Tipo                          | Descripción                                                                                                 | Notas                                 |
+| :------------------------ | :---------------------------- | :---------------------------------------------------------------------------------------------------------- | :------------------------------------ |
+| `id`                      | `String @id @default(cuid())` | Identificador único de la suscripción.                                                                      |                                       |
+| `user_id`                 | `String`                      | ID del usuario suscrito.                                                                                    | Relación con el modelo `User`.        |
+| `plan_id`                 | `String`                      | ID del plan al que está suscrito el usuario.                                                                | Relación con el modelo `Plan`.        |
+| `status`                  | `String`                      | Estado de la suscripción (ej. "active", "inactive").                                                        |                                       |
+| `current_period_start`    | `DateTime`                    | Fecha de inicio del período de facturación actual.                                                          |                                       |
+| `current_period_end`      | `DateTime`                    | Fecha de fin del período de facturación actual.                                                             |                                       |
+| `trial_start`             | `DateTime?`                   | Fecha de inicio del período de prueba (opcional).                                                           |                                       |
+| `trial_end`               | `DateTime?`                   | Fecha de fin del período de prueba (opcional).                                                              |                                       |
+| `processorSubscriptionId` | `String?`                     | ID de la suscripción en el sistema del procesador de pagos (ej. ID de suscripción de Tefpay).               | Anteriormente `tefpaySubscriptionId`. |
+| `processorCustomerId`     | `String?`                     | ID del cliente en el sistema del procesador de pagos (ej. ID de cliente de Tefpay).                         | Anteriormente `tefpayCustomerId`.     |
+| `paymentMethod`           | `String?`                     | Método de pago utilizado para la suscripción (ej. `card`, `paypal`, etc., según lo devuelva el procesador). |                                       |
+| `createdAt`               | `DateTime @default(now())`    | Marca de tiempo de creación de la suscripción.                                                              |                                       |
+| `updatedAt`               | `DateTime @updatedAt`         | Marca de tiempo de la última actualización de la suscripción.                                               |                                       |
+
+### Cambios Recientes en el Esquema
+
+Se refactorizó la tabla `Subscription` para que sea agnóstica al procesador de pagos:
+
+- `tefpaySubscriptionId` se renombró a `processorSubscriptionId`.
+- `tefpayCustomerId` se renombró a `processorCustomerId`.
+
+Estos cambios permiten almacenar identificadores de diferentes procesadores de pago en los mismos campos.
+
 ### 6. `Plan`
 
 Define los diferentes planes de suscripción ofrecidos.

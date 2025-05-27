@@ -25,13 +25,10 @@ export class AuthGuard implements CanActivate {
 
     try {
       const payload = await this.jwtService.verifyAsync(token, {
-        secret: this.configService.get<string>("JWT_API_SECRET"), // Asegúrate que JWT_API_SECRET esté en tus .env
+        secret: this.configService.get<string>("JWT_API_SECRET"),
       });
-      // Adjunta el payload al objeto request.
-      // Define una interfaz extendida para Request si quieres tipado fuerte en request.user
       (request as any).user = payload;
     } catch (error) {
-      // Puedes loguear el error o manejar diferentes tipos de errores JWT (TokenExpiredError, JsonWebTokenError)
       throw new UnauthorizedException(
         `Invalid or expired authentication token. (${error.message})`
       );

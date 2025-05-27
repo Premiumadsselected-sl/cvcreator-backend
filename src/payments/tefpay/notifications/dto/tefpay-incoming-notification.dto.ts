@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { IsString, IsOptional, IsObject } from "class-validator";
+import { IsString, IsOptional } from "class-validator";
 
 // DTO for the actual data received from Tefpay
 export class TefpayIncomingNotificationDto {

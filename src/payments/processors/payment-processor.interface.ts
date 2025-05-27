@@ -8,6 +8,8 @@ export interface PreparePaymentParams {
   success_url?: string; // URL a la que redirigir en caso de éxito
   cancel_url?: string; // URL a la que redirigir en caso de cancelación
   notification_url?: string; // URL para notificaciones del procesador (webhook)
+  locale: string; // AÑADIDO: Idioma para la pasarela de pago
+  tefpayTerminal?: string; // AÑADIDO: Terminal específico de Tefpay (opcional)
   metadata?: Record<string, any>; // Metadatos adicionales
 }
 
@@ -29,7 +31,7 @@ export interface IPaymentProcessor {
 
   // NUEVO: Método para solicitar la cancelación de una suscripción
   requestSubscriptionCancellation?(params: {
-    subscriptionId: string;
+    processorSubscriptionId: string; // MODIFICADO: Cambiado de subscriptionId a processorSubscriptionId
     cancellationReason?: string; // Razón opcional para la cancelación
     // Otros parámetros específicos del procesador podrían ir aquí
   }): Promise<SubscriptionCancellationResponse>;
@@ -41,6 +43,20 @@ export interface ProcessedNotificationResponse {
   status: string; // ej: 'completed', 'failed', 'pending'
   eventType?: string; // ej: 'payment.succeeded', 'charge.failed'
   transactionId?: string;
+  processorTransactionId?: string; // AÑADIDO: ID de transacción específico del procesador
+  amount?: number; // AÑADIDO: Monto de la transacción
+  currency?: string; // AÑADIDO: Moneda de la transacción
+  timestamp?: Date; // AÑADIDO: Fecha y hora de la notificación
+  customerIdentifier?: string; // AÑADIDO: Identificador del cliente
+  subscriptionIdentifier?: string; // AÑADIDO: Identificador de la suscripción (si aplica)
+  cardDetails?: {
+    // AÑADIDO: Detalles de la tarjeta (parciales)
+    last4?: string;
+    brand?: string;
+    expiryMonth?: string;
+    expiryYear?: string;
+  };
+  metadata?: Record<string, any>; // AÑADIDO: Metadatos adicionales
   rawData: any;
   message?: string;
   error?: string;

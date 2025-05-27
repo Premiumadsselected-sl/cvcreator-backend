@@ -10,7 +10,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url = env("DATABASE_URL")
 }
 
 model User {
@@ -40,60 +40,6 @@ model User {
   apiTokens     ApiToken[]
 }
 
-enum SubscriptionStatus {
-  ACTIVE
-  INACTIVE
-  CANCELLED
-  PAST_DUE
-  TRIALING
-  PENDING_CANCELLATION // Añadido para el estado de cancelación pendiente
-  PENDING // Estado inicial o pendiente de pago
-}
-
-model Image {
-  id         String  @id @default(cuid())
-  user_id    String  @db.VarChar(100)
-  type       String? @default("profile") @db.VarChar(50) // profile, cv_asset, etc.
-  image_name String  @db.VarChar(100)
-  image_type String  @db.VarChar(50) // mime type
-  image_url  String? @db.Text // URL si se almacena en un servicio externo (S3, Cloudinary)
-  image_path String? @db.Text // Path si se almacena localmente (considerar esto cuidadosamente)
-  image_size Int     @default(0) // en bytes
-  image_data Json?   @default("{}") // Metadatos adicionales
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
-}
-
-model Subscription {
-  id                    String    @id @default(cuid())
-  user_id               String    @unique @db.VarChar(100)
-  plan_id               String    @db.VarChar(100) // Referencia a un modelo Plan si tienes diferentes tipos de planes
-  status                SubscriptionStatus @default(PENDING) // Cambiado a enum y PENDING como default
-  trial_start           DateTime?
-  trial_end             DateTime?
-  current_period_start  DateTime?
-  current_period_end    DateTime?
-  cancel_at_period_end  Boolean?  @default(false)
-  requested_cancellation_at DateTime? // NUEVO: Cuándo el usuario solicitó la cancelación
-  cancel_at             DateTime? // NUEVO: Fecha efectiva de cancelación (fin del periodo de gracia)
-  canceled_at          DateTime?
-  ended_at              DateTime? // Cuando la suscripción termina definitivamente
-  tefpay_transaction_id String?   @db.VarChar(255) // ID de transacción de Tefpay para la suscripción
-  tefpay_subscription_account String? @unique @db.VarChar(255) // NUEVO: ID de suscripción de Tefpay
-  metadata              Json?     @default("{}")
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  plan Plan? @relation(fields: [plan_id], references: [id]) // Opcional, si tienes un modelo Plan
-
-  Payment            Payment[]
-  TefPayNotification TefPayNotification[]
-}
-
 enum PlanType {
   TRIAL_PLAN
   NORMAL_PLAN
@@ -114,7 +60,7 @@ model Plan {
   active           Boolean @default(true)
   
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now())
 
   subscriptions Subscription[]
 }
@@ -129,7 +75,6 @@ model Payment {
   method               String?   @db.VarChar(50) // card, paypal, etc.
   processor            String    @db.VarChar(50) // tefpay, stripe, etc.
   processor_payment_id String?   @unique @db.VarChar(255) // ID del pago en el procesador
-  tefpay_transaction_id String?   @db.VarChar(255) // ID de transacción de Tefpay para el PAGO
   matching_data        String?   @unique @db.VarChar(255) // RENOMBRADO: Antes tefpay_matching_data
   signature            String?   @db.VarChar(255) // RENOMBRADO: Antes tefpay_frontend_signature
   payment_method_details Json?    @default("{}") // AÑADIDO: Detalles del método de pago (ej. datos de tarjeta)
@@ -148,6 +93,62 @@ model Payment {
   subscription       Subscription?        @relation(fields: [subscription_id], references: [id]) // Descomentar si se usa subscription_id
   TefPayNotification TefPayNotification[]
 }
+
+enum SubscriptionStatus {
+  ACTIVE
+  INACTIVE
+  CANCELLED
+  PAST_DUE
+  TRIALING
+  PENDING_CANCELLATION // Añadido para el estado de cancelación pendiente
+  PENDING // Estado inicial o pendiente de pago
+}
+
+model Subscription {
+  id                    String    @id @default(cuid())
+  user_id               String    @unique @db.VarChar(100)
+  plan_id               String    @db.VarChar(100)
+  status                SubscriptionStatus @default(PENDING) // Cambiado a enum y PENDING como default
+  trial_start           DateTime?
+  trial_end             DateTime?
+  current_period_start  DateTime?
+  current_period_end    DateTime?
+  cancel_at_period_end  Boolean?  @default(false)
+  requested_cancellation_at DateTime? // NUEVO: Cuándo el usuario solicitó la cancelación
+  cancel_at             DateTime? // NUEVO: Fecha efectiva de cancelación (fin del periodo de gracia)
+  canceled_at          DateTime?
+  ended_at              DateTime? // Cuando la suscripción termina definitivamente
+  processor_subscription_id String? @unique @db.VarChar(255) // AÑADIDO
+  payment_processor_name  String? @db.VarChar(50) // AÑADIDO
+  metadata              Json?     @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  plan Plan? @relation(fields: [plan_id], references: [id]) // Opcional, si tienes un modelo Plan
+
+  Payment            Payment[]
+  TefPayNotification TefPayNotification[]
+}
+
+model EmailLog {
+  id                  String    @id @default(cuid())
+  user_id             String?   @db.VarChar(100) // Opcional si son emails transaccionales no ligados a un usuario
+  recipient_email     String    @db.VarChar(100)
+  subject             String    @db.VarChar(255)
+  body                String?   @db.Text // O un path a una plantilla
+  status              String    @default("pending") @db.VarChar(50) // pending, sent, failed, bounced
+  sent_at             DateTime?
+  error_message       String?   @db.Text
+  provider_message_id String?   @db.VarChar(255)
+  type                String    @db.VarChar(50) // welcome, password_reset, cv_shared, etc.
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+}
+
+// -- Modelos específicos para TefPay --
 
 enum TefPayNotificationStatus {
   RECEIVED
@@ -177,6 +178,21 @@ model TefPayNotification {
   ds_Amount                   String? @db.VarChar(20) // En céntimos
   ds_Currency                 String? @db.VarChar(10)
   ds_Signature                String? @db.VarChar(255) // Firma para validar la notificación
+
+  // Campos que faltaban y se están añadiendo:
+  ds_Merchant_TransactionID     String? @db.VarChar(100) // ID de transacción de Tefpay
+  ds_PanMask                    String? @db.VarChar(50)  // PAN enmascarado
+  ds_Expiry                     String? @db.VarChar(4)   // Fecha de caducidad YYMM
+  ds_Bank                       String? @db.VarChar(100) // Nombre del banco
+  ds_Merchant_Guarantees        String? @db.VarChar(10)  // Garantías (ej. 3DSecure)
+  ds_CostumerCreditCardCountry  String? @db.VarChar(3)   // País de la tarjeta del cliente
+  ds_CostumerCreditCardBrand    String? @db.VarChar(50)  // Marca de la tarjeta (Visa, Mastercard)
+  ds_CostumerCreditCardType     String? @db.VarChar(10)  // Tipo de tarjeta (crédito, débito)
+  ds_CostumerCreditCardExpiryDate String? @db.VarChar(4) // Fecha de caducidad de la tarjeta del cliente YYMM
+  ds_CostumerCreditCardId       String? @db.VarChar(100) // ID de la tarjeta del cliente (si lo proporciona Tefpay)
+  ds_CostumerCreditCardBin      String? @db.VarChar(6)   // BIN de la tarjeta
+  ds_Merchant_UserName          String? @db.Text         // Nombre del titular de la tarjeta
+
   raw_notification            Json    @default("{}")
   status                      TefPayNotificationStatus  @default(RECEIVED) // Changed to use the enum
   processing_notes            String? @db.Text
@@ -199,24 +215,11 @@ model TefPayNotification {
   updatedAt DateTime @default(now())
 }
 
-model EmailLog {
-  id                  String    @id @default(cuid())
-  user_id             String?   @db.VarChar(100) // Opcional si son emails transaccionales no ligados a un usuario
-  recipient_email     String    @db.VarChar(100)
-  subject             String    @db.VarChar(255)
-  body                String?   @db.Text // O un path a una plantilla
-  status              String    @default("pending") @db.VarChar(50) // pending, sent, failed, bounced
-  sent_at             DateTime?
-  error_message       String?   @db.Text
-  provider_message_id String?   @db.VarChar(255)
-  type                String    @db.VarChar(50) // welcome, password_reset, cv_shared, etc.
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now())
-}
 
 // --- Modelos específicos para CV Creator ---
 
+// Modelo para almacenar CVs
 model Cv {
   id             String    @id @default(cuid())
   user_id        String    @db.VarChar(100)
@@ -240,6 +243,7 @@ model Cv {
   sections CvSection[] // Si decides normalizar las secciones
 }
 
+// Modelo para almacenar cartas de presentación
 model CoverLetter {
   id          String  @id @default(cuid())
   user_id     String  @db.VarChar(100)
@@ -260,6 +264,7 @@ model CoverLetter {
   template Template? @relation(fields: [template_id], references: [id])
 }
 
+// Modelo para almacenar plantillas de CVs y cartas de presentación
 model Template {
   id                String  @id @default(cuid())
   name              String  @unique @db.VarChar(100)
@@ -291,6 +296,23 @@ model CvSection {
   updatedAt DateTime @updatedAt
 
   cv Cv @relation(fields: [cv_id], references: [id], onDelete: Cascade)
+}
+
+// Modelo para almacenar imágenes de perfil o CVs
+model Image {
+  id         String  @id @default(cuid())
+  user_id    String  @db.VarChar(100)
+  type       String? @default("profile") @db.VarChar(50) // profile, cv_asset, etc.
+  image_name String  @db.VarChar(100)
+  image_type String  @db.VarChar(50) // mime type
+  image_url  String? @db.Text // URL si se almacena en un servicio externo (S3, Cloudinary)
+  image_path String? @db.Text // Path si se almacena localmente (considerar esto cuidadosamente)
+  image_size Int     @default(0) // en bytes
+  image_data Json?   @default("{}") // Metadatos adicionales
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
 }
 
 // Modelo para tokens de API (si se ofrece acceso programático)

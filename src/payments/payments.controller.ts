@@ -5,6 +5,10 @@ import {
   HttpCode,
   HttpStatus,
   UseGuards,
+  Get,
+  Param,
+  Delete,
+  Patch,
 } from "@nestjs/common";
 import { PaymentsService } from "./payments.service";
 import {
@@ -12,6 +16,7 @@ import {
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
+  ApiParam,
 } from "@nestjs/swagger";
 import { InitiatePaymentDto } from "./dto/initiate-payment.dto";
 import { InitiatePaymentResponseDto } from "./dto/initiate-payment-response.dto";
@@ -52,7 +57,7 @@ export class PaymentsController {
     return this.paymentsService.initiatePayment(initiatePaymentDto, user.id);
   }
 
-  /* // Commenting out CRUD methods as they are not implemented in PaymentsService
+  // Commenting out CRUD methods as they are not implemented in PaymentsService
   @Post()
   @ApiOperation({ summary: "Create a new payment" })
   @ApiResponse({
@@ -62,7 +67,8 @@ export class PaymentsController {
   })
   @ApiResponse({ status: 400, description: "Bad Request." })
   @HttpCode(HttpStatus.CREATED)
-  create(@Body() createPaymentDto: any) { // Changed CreatePaymentDto to any to avoid import
+  create(@Body() createPaymentDto: any) {
+    // Changed CreatePaymentDto to any to avoid import
     // return this.paymentsService.create(createPaymentDto);
   }
 
@@ -97,20 +103,19 @@ export class PaymentsController {
 
   @Patch(":id")
   @ApiOperation({ summary: "Update a payment by ID" })
-  // @ApiParam({
-  //   name: "id",
-  //   description: "Payment ID",
-  //   type: "string",
-  // })
+  @ApiParam({
+    name: "id",
+    description: "Payment ID",
+    type: "string",
+  })
   @ApiResponse({
     status: 200,
     description: "The payment has been successfully updated.",
-    // type: PaymentDto,
   })
   @ApiResponse({ status: 404, description: "Payment not found." })
   @ApiResponse({ status: 400, description: "Bad Request." })
   update(
-    @Param("id") id: string, 
+    @Param("id") id: string,
     @Body() updatePaymentDto: any // Changed UpdatePaymentDto to any to avoid import
   ) {
     // return this.paymentsService.update(id, updatePaymentDto);
@@ -132,5 +137,4 @@ export class PaymentsController {
   remove(@Param("id") id: string) {
     // return this.paymentsService.remove(id);
   }
-  */
 }

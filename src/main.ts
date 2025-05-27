@@ -1,4 +1,4 @@
-import { NestFactory } from "@nestjs/core";
+import { NestFactory, HttpAdapterHost } from "@nestjs/core";
 import { AppModule } from "./app.module";
 import { ValidationPipe, Logger } from "@nestjs/common";
 import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
@@ -8,10 +8,8 @@ import { Express } from "express";
 import basicAuth from "express-basic-auth";
 import * as dotenv from "dotenv";
 import { ConfigService } from "@nestjs/config";
-import { GlobalHttpExceptionFilter } from "./common/filters/http-exception.filter"; // Importar el filtro global
-import { HttpAdapterHost } from "@nestjs/core"; // Importar HttpAdapterHost
+import { GlobalHttpExceptionFilter } from "./common/filters/http-exception.filter";
 
-// Cargar variables de entorno.
 dotenv.config();
 
 const logger = new Logger("Bootstrap");
@@ -21,9 +19,8 @@ async function bootstrap(): Promise<Express> {
   const app = await NestFactory.create(AppModule, new ExpressAdapter(server));
   const configService = app.get(ConfigService);
 
-  // Aplicar el filtro global de excepciones HTTP
-  const httpAdapter = app.get(HttpAdapterHost); // Obtener HttpAdapterHost
-  app.useGlobalFilters(new GlobalHttpExceptionFilter(httpAdapter)); // Pasar httpAdapter al constructor
+  const httpAdapter = app.get(HttpAdapterHost);
+  app.useGlobalFilters(new GlobalHttpExceptionFilter(httpAdapter));
 
   const globalPrefix = configService.get<string>("API_GLOBAL_PREFIX", "api");
   app.setGlobalPrefix(globalPrefix);
@@ -132,7 +129,6 @@ async function bootstrap(): Promise<Express> {
   return server;
 }
 
-// --- Gestión de instancia para Serverless y Local ---
 let cachedServerInstance: Promise<Express> | null = null;
 
 async function getAppInstance(): Promise<Express> {
@@ -145,7 +141,6 @@ async function getAppInstance(): Promise<Express> {
   return cachedServerInstance;
 }
 
-// --- Exportación para Vercel (u otros entornos serverless) ---
 export const handler = async (req: any, res: any) => {
   try {
     const serverInstance = await getAppInstance();
@@ -156,16 +151,14 @@ export const handler = async (req: any, res: any) => {
   }
 };
 
-// --- Ejecución local ---
 async function runLocal() {
   const port = parseInt(process.env.PORT || "3001", 10);
 
   const localApp = await NestFactory.create(AppModule);
   const configService = localApp.get(ConfigService);
 
-  // Aplicar el filtro global de excepciones HTTP también para runLocal
-  const httpAdapter = localApp.get(HttpAdapterHost); // Obtener HttpAdapterHost para localApp
-  localApp.useGlobalFilters(new GlobalHttpExceptionFilter(httpAdapter)); // Aplicar el filtro
+  const httpAdapter = localApp.get(HttpAdapterHost);
+  localApp.useGlobalFilters(new GlobalHttpExceptionFilter(httpAdapter));
 
   const globalPrefix = configService.get<string>("API_GLOBAL_PREFIX", "api");
   localApp.setGlobalPrefix(globalPrefix);
@@ -264,7 +257,6 @@ async function runLocal() {
   );
 }
 
-// Determinar si estamos en un entorno serverless o local
 if (
   process.env.VERCEL ||
   process.env.AWS_LAMBDA_FUNCTION_NAME ||

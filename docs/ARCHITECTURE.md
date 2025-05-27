@@ -94,3 +94,37 @@ Cada módulo típicamente contiene:
 - **Mantenibilidad**: La separación de responsabilidades y el uso de TypeScript mejoran la mantenibilidad del código.
 - **Seguridad**: Se presta atención a la seguridad a través de la validación de entradas, la autenticación basada en JWT y la protección contra vulnerabilidades comunes.
 - **Testeabilidad**: La estructura facilita la escritura de pruebas unitarias para servicios y controladores, así como pruebas E2E.
+
+## Módulo de Pagos (`PaymentsModule`)
+
+El `PaymentsModule` es responsable de gestionar la integración con las pasarelas de pago y procesar las transacciones financieras. Sus componentes principales son:
+
+- **`PaymentsController`**: Expone los endpoints para iniciar pagos, recibir notificaciones de webhooks, etc.
+- **`PaymentsService`**: Contiene la lógica de negocio para procesar pagos, validar respuestas de las pasarelas, etc.
+- **`TefpayService`**: Implementa la lógica específica para interactuar con la pasarela de pago Tefpay.
+
+### Abstracción del Procesador de Pagos
+
+Para permitir la integración de múltiples procesadores de pago (como Tefpay, Stripe, etc.) de una manera flexible, se ha introducido la interfaz `IPaymentProcessor`.
+
+- **`IPaymentProcessor`**: Define un contrato común para todas las operaciones relacionadas con pagos que un procesador debe implementar (ej. `preparePaymentParameters`, `handleWebhookNotification`, `requestSubscriptionCancellation`, `verifySignature`).
+- **`PAYMENT_PROCESSOR_TOKEN`**: Un token de NestJS que se utiliza para inyectar la implementación activa del `IPaymentProcessor`.
+- **Implementaciones Concretas**: Servicios como `TefpayService` implementan `IPaymentProcessor`. En `PaymentsModule`, se especifica qué servicio se usará para `PAYMENT_PROCESSOR_TOKEN`.
+
+Esto desacopla servicios como `SubscriptionsService` y `PaymentsService` de implementaciones específicas de procesadores de pago.
+
+### Inyección de Dependencias y Circularidad
+
+- `PaymentsModule` se ha marcado como `@Global()` para que el `PAYMENT_PROCESSOR_TOKEN` (y por ende, la implementación de `IPaymentProcessor`) esté disponible para ser inyectado en toda la aplicación sin necesidad de importar `PaymentsModule` explícitamente en cada módulo que lo necesite (como `SubscriptionsModule`).
+- Se utiliza `forwardRef()` en las importaciones de `PaymentsModule` y `SubscriptionsModule` para resolver dependencias circulares que surgieron debido a que ambos módulos dependen entre sí.
+
+## Módulo de Suscripciones (`SubscriptionsModule`)
+
+El `SubscriptionsModule` gestiona la lógica relacionada con las suscripciones de los usuarios a diferentes planes de pago. Sus componentes principales son:
+
+- **`SubscriptionsController`**: Expone los endpoints para crear, actualizar y cancelar suscripciones.
+- **`SubscriptionsService`**: Contiene la lógica de negocio para gestionar las suscripciones, incluyendo la interacción con el procesador de pagos para activar o cancelar suscripciones.
+
+### Dependencia del Procesador de Pagos
+
+El `SubscriptionsService` ahora depende de la abstracción `IPaymentProcessor` (inyectada mediante `PAYMENT_PROCESSOR_TOKEN`) en lugar de una implementación concreta. Esto le permite interactuar con cualquier procesador de pagos configurado sin conocer sus detalles específicos.

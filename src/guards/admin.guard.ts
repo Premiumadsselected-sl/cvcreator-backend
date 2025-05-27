@@ -5,14 +5,12 @@ import {
   ForbiddenException,
   UnauthorizedException,
 } from "@nestjs/common";
-import { PrismaService } from "../prisma/prisma.service"; // Ajusta esta ruta si es necesario
+import { PrismaService } from "../prisma/prisma.service";
 import { Request } from "express";
 
-// Asume que el payload del JWT (request.user) tiene una propiedad 'sub' (ID de usuario)
-// y opcionalmente 'role'. Ajusta según la estructura real de tu payload JWT.
 interface AuthenticatedRequestUser {
-  sub: string; // ID del usuario
-  role?: string; // Rol del usuario, si está en el token
+  sub: string;
+  role?: string;
   [key: string]: any;
 }
 
@@ -29,16 +27,10 @@ export class AdminGuard implements CanActivate {
     const userPayload = request.user;
 
     if (!userPayload || !userPayload.sub) {
-      // Esto no debería ocurrir si AuthGuard se ejecuta primero y es exitoso.
       throw new UnauthorizedException(
         "User not authenticated or user ID missing in token payload."
       );
     }
-
-    // Optimización: si el rol 'admin' ya está en el token y confías en él:
-    // if (userPayload.role === 'admin') {
-    //   return true;
-    // }
 
     try {
       const userFromDb = await this.prisma.user.findUnique({
@@ -46,7 +38,6 @@ export class AdminGuard implements CanActivate {
       });
 
       if (!userFromDb) {
-        // El usuario del token no existe en la DB.
         throw new UnauthorizedException("User not found.");
       }
 
@@ -60,7 +51,6 @@ export class AdminGuard implements CanActivate {
       ) {
         throw error;
       }
-      // Loguear errores inesperados
       console.error("Error in AdminGuard:", error);
       throw new ForbiddenException(
         "An error occurred while verifying admin privileges."

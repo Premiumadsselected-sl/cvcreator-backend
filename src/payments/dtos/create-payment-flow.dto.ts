@@ -1,17 +1,14 @@
-import { OmitType, ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { PaymentDto, PaymentStatus } from "./payment.dto";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   IsString,
+  IsNotEmpty,
   IsOptional,
-  IsEnum,
-  IsObject,
   IsEmail,
   IsUrl,
   IsLocale,
   ValidateNested,
   IsNumber,
   Min,
-  IsNotEmpty,
 } from "class-validator";
 import { Type } from "class-transformer";
 
@@ -29,7 +26,7 @@ export class SubscriptionDetailsDto {
     example: "2025-12-31",
   })
   @IsString()
-  @IsNotEmpty()
+  @IsNotEmpty() // Podría ser opcional si la suscripción es indefinida hasta cancelación
   endDate: string;
 
   @ApiPropertyOptional({
@@ -50,35 +47,14 @@ export class SubscriptionDetailsDto {
   subscription_id?: string;
 }
 
-export class CreatePaymentDto extends OmitType(PaymentDto, [
-  "id",
-  "createdAt",
-  "updatedAt",
-  "paid_at", // Se manejará a través de campos opcionales más abajo si es necesario para ciertos flujos
-  "refunded_at",
-  "status", // El estado se gestionará internamente o se pasará explícitamente si es necesario
-  "processor_response", // Se manejará a través de campos opcionales más abajo
-  "error_message",
-  "refunded_amount",
-  "refund_reason",
-  // "processor", // Se maneja con el campo processor opcional de abajo
-] as const) {
-  @ApiPropertyOptional({
-    description:
-      "Payment processor to be used. Defaults to ACTIVE_PAYMENT_PROCESSOR if not provided.",
-    example: "tefpay",
-  })
-  @IsOptional()
-  @IsString()
-  processor?: string;
-
-  @ApiPropertyOptional({
-    description: "ID of the plan related to this payment or to subscribe to.",
+export class CreatePaymentFlowDto {
+  @ApiProperty({
+    description: "ID of the plan to purchase or subscribe to.",
     example: "plan_monthly_premium",
   })
   @IsString()
-  @IsOptional()
-  plan_id?: string;
+  @IsNotEmpty()
+  planId: string;
 
   @ApiPropertyOptional({
     description: "Email of the customer for the payment.",
@@ -86,7 +62,7 @@ export class CreatePaymentDto extends OmitType(PaymentDto, [
   })
   @IsOptional()
   @IsEmail()
-  customerEmail?: string;
+  customerEmail?: string; // Será obligatorio si el usuario no está autenticado
 
   @ApiPropertyOptional({
     description: "Custom success URL to redirect after successful payment.",
@@ -147,43 +123,9 @@ export class CreatePaymentDto extends OmitType(PaymentDto, [
   subscriptionDetails?: SubscriptionDetailsDto;
 
   @ApiPropertyOptional({
-    description: "Payment matching data for tefpay",
+    description: "Additional metadata to associate with the payment.",
+    example: { order_ref: "MY_CUSTOM_REF_123", customer_id: "CUST_XYZ" },
   })
-  @IsString()
-  @IsOptional()
-  tefpay_matching_data?: string;
-
-  @ApiPropertyOptional({
-    description: "Payment ID from the processor, if known at creation",
-  })
-  @IsString()
-  @IsOptional()
-  processor_payment_id?: string;
-
-  @ApiPropertyOptional({
-    description:
-      "Raw response from the payment processor, if available at creation",
-  })
-  @IsObject()
-  @IsOptional()
-  processor_response?: any;
-
-  @ApiPropertyOptional({
-    description: "Timestamp when the payment was made, if known at creation",
-  })
-  @IsString()
-  @IsOptional()
-  paid_at?: string | Date;
-
-  @ApiPropertyOptional({
-    description: "Initial status of the payment, e.g., PENDING",
-  })
-  @IsEnum(PaymentStatus)
-  @IsOptional()
-  status?: PaymentStatus; // Se mantiene opcional aquí, el servicio puede asignar PENDING por defecto
-
-  @ApiPropertyOptional({ description: "Additional metadata for the payment" })
-  @IsObject()
   @IsOptional()
   metadata?: Record<string, any>;
 }

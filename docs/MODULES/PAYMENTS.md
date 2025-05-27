@@ -1,3 +1,9 @@
+---
+id: payments-module
+title: Módulo de Pagos
+sidebar_label: Pagos
+---
+
 # Gestión de Pagos (PaymentsModule)
 
 El `PaymentsModule` es responsable de todas las operaciones relacionadas con el procesamiento de pagos en la aplicación. Esto incluye la iniciación de pagos, la gestión de diferentes procesadores de pago, y el manejo de notificaciones de los mismos.
@@ -70,104 +76,113 @@ Para configurar el módulo de pagos, asegúrate de que las siguientes variables 
 Para cada procesador de pago, se requerirán variables de entorno específicas. Para **Tefpay**:
 
 - `TEFPAY_MERCHANT_CODE`: Código de comerciante de Tefpay.
-- `TEFPAY_PRIVATE_KEY`: Clave privada de Tefpay para la firma de transacciones.
-- `TEFPAY_API_URL`: (Opcional) URL base de la API de Tefpay. Por defecto: `https://api.tefpay.com/rest`.
-- `TEFPAY_FORM_URL`: (Opcional) URL del formulario de pago de Tefpay. Por defecto: `https://pgw.tefpay.com/web/pay`.
-- `TEFPAY_BACKOFFICE_URL`: URL del backoffice de Tefpay, utilizada para construir URLs de notificación si es necesario.
+- `TEFPAY_SECRET_KEY`: Clave secreta para firmar y verificar las transacciones de Tefpay.
+- `TEFPAY_FORM_URL`: URL del formulario de pago de Tefpay.
+- `TEFPAY_DEFAULT_SUCCESS_URL`: URL a la que redirigir tras un pago exitoso (si no se especifica otra).
+- `TEFPAY_DEFAULT_ERROR_URL`: URL a la que redirigir tras un pago fallido (si no se especifica otra).
+- `TEFPAY_DEFAULT_CANCEL_URL`: URL a la que redirigir si el usuario cancela el pago (si no se especifica otra).
+- `TEFPAY_TERMINAL`: Terminal de Tefpay a utilizar (por defecto '001').
+- `APP_BASE_URL`: URL base de la aplicación, utilizada para construir URLs de notificación y retorno.
 
-## Añadir un Nuevo Procesador de Pago
+## Flujo de Notificaciones (Webhook)
 
-Para añadir soporte para un nuevo procesador de pago (ej. "Stripe"), sigue estos pasos:
+El `PaymentsService` expone un método `handlePaymentNotification` que toma un `processorName` (ej. 'tefpay') y los datos de la notificación. Internamente, delega el manejo al servicio del procesador de pagos correspondiente (obtenido a través de la interfaz `IPaymentProcessor`).
 
-1.  **Crear el Servicio del Procesador**: Implementa un nuevo servicio (ej. `StripeService`) en una carpeta dentro de `src/payments/processors/` (ej. `src/payments/processors/stripe/stripe.service.ts`). Este servicio debe implementar la interfaz `IPaymentProcessor`.
+### Servicios de Procesadores de Pago
 
-    ```typescript
-    // src/payments/processors/stripe/stripe.service.ts
-    import { Injectable } from "@nestjs/common";
-    import {
-      IPaymentProcessor,
-      PreparePaymentParams,
-      PreparedPaymentResponse,
-    } from "../payment-processor.interface";
-    import { ConfigService } from "@nestjs/config";
-    // Importa cualquier SDK o dependencia necesaria para Stripe
+Actualmente, el único procesador implementado es Tefpay (`TefpayService`). Este servicio implementa la interfaz `IPaymentProcessor`.
 
-    @Injectable()
-    export class StripeService implements IPaymentProcessor {
-      constructor(private readonly configService: ConfigService) {
-        // Inicializa el SDK de Stripe con las claves de API desde ConfigService
-      }
+#### Interfaz `IPaymentProcessor`
 
-      preparePaymentParameters(
-        params: PreparePaymentParams
-      ): PreparedPaymentResponse {
-        // Lógica para preparar un pago con Stripe
-        // ...
-        return {
-          url: "stripe_payment_url",
-          fields: {},
-          payment_processor_name: "stripe",
-        };
-      }
+La interfaz `IPaymentProcessor` define el contrato que todos los servicios de procesadores de pago deben implementar. Esto permite que `PaymentsService` y `SubscriptionsService` interactúen con diferentes procesadores de manera uniforme.
 
-      // Implementa otros métodos de IPaymentProcessor si es necesario
-    }
-    ```
+## Variables de Entorno
 
-2.  **Añadir Configuración**: Define las variables de entorno necesarias para el nuevo procesador en el archivo `.env` (ej. `STRIPE_API_KEY`, `STRIPE_PUBLISHABLE_KEY`). Asegúrate de que `ConfigService` las pueda leer.
-3.  **Actualizar la Factoría en `PaymentsModule`**: Modifica la factoría del proveedor `PAYMENT_PROCESSOR_TOKEN` en `src/payments/payments.module.ts` para que pueda instanciar y devolver tu nuevo servicio cuando `ACTIVE_PAYMENT_PROCESSOR` esté configurado con el nombre de tu nuevo procesador.
+Para el correcto funcionamiento del módulo de pagos y sus procesadores, se deben definir varias variables de entorno en el archivo `.env`. A continuación se detallan las variables necesarias:
 
-    ```typescript
-    // src/payments/payments.module.ts
-    // ... (importa StripeService)
+- `ACTIVE_PAYMENT_PROCESSOR`: (Opcional) El nombre del procesador de pago a utilizar (ej. `tefpay`). Si no se especifica, se usará `tefpay` por defecto.
 
-    // ...
-    providers: [
-      TefpayService, // Sigue proveyendo los servicios concretos
-      StripeService, // Añade el nuevo servicio aquí
-      {
-        provide: PAYMENT_PROCESSOR_TOKEN,
-        useFactory: (
-          configService: ConfigService,
-          tefpayService: TefpayService,
-          stripeService: StripeService // Inyecta el nuevo servicio
-        ) => {
-          const activeProcessor = configService.get<string>(
-            'ACTIVE_PAYMENT_PROCESSOR',
-            'tefpay'
-          );
-          if (activeProcessor === 'tefpay') {
-            return tefpayService;
-          } else if (activeProcessor === 'stripe') {
-            return stripeService; // Devuelve la instancia de StripeService
-          }
-          // ... más procesadores
-          else {
-            // Fallback o error
-            return tefpayService;
-          }
-        },
-        inject: [ConfigService, TefpayService, StripeService], // Añade el nuevo servicio a las inyecciones
-      },
-      PaymentsService,
-      // ...
-    ],
-    // ...
-    ```
+Para **Tefpay**:
 
-4.  **Exportar el Servicio (Opcional pero Recomendado)**: Si el nuevo servicio necesita ser inyectado directamente en otros módulos (poco común para procesadores), expórtalo desde `PaymentsModule`.
-5.  **Documentación**: Actualiza esta documentación (`PAYMENTS.md`) para incluir el nuevo procesador, su configuración y cualquier detalle relevante.
+- `TEFPAY_MERCHANT_CODE`: Código de comerciante de Tefpay.
+- `TEFPAY_SECRET_KEY`: Clave secreta para firmar y verificar las transacciones de Tefpay.
+- `TEFPAY_FORM_URL`: URL del formulario de pago de Tefpay.
+- `TEFPAY_DEFAULT_SUCCESS_URL`: URL a la que redirigir tras un pago exitoso (si no se especifica otra).
+- `TEFPAY_DEFAULT_ERROR_URL`: URL a la que redirigir tras un pago fallido (si no se especifica otra).
+- `TEFPAY_DEFAULT_CANCEL_URL`: URL a la que redirigir si el usuario cancela el pago (si no se especifica otra).
+- `TEFPAY_TERMINAL`: Terminal de Tefpay a utilizar (por defecto '001').
+- `APP_BASE_URL`: URL base de la aplicación, utilizada para construir URLs de notificación y retorno.
 
-## Endpoints de la API
+## Diagrama de Secuencia (Ejemplo: Flujo de Pago con Tefpay)
 
-(Esta sección debería detallar los endpoints relacionados con pagos, como `/payments/initiate-flow`, etc. Próximamente se completará con más detalle).
+```mermaid
+sequenceDiagram
+    participant User
+    participant ClientApp as Cliente (Frontend)
+    participant BackendApp as Backend (API)
+    participant TefpayService as TefpayService (IPaymentProcessor)
+    participant TefpayServer as Servidor Tefpay
 
-- `POST /api/payments/payment-flow`: Inicia un flujo de pago.
-- `POST /api/payments`: Crea un registro de pago (uso interno o específico).
-- `GET /api/payments`: Lista los pagos (con filtros apropiados y paginación).
-- `GET /api/payments/:id`: Obtiene un pago específico.
-- `PATCH /api/payments/:id`: Actualiza un pago.
-- `POST /api/payments/tefpay/notifications`: Endpoint para recibir notificaciones de Tefpay (webhooks).
+    User->>ClientApp: Inicia compra de plan
+    ClientApp->>BackendApp: POST /payments/payment-flow (planId, email, etc.)
+    BackendApp->>TefpayService: preparePaymentParameters(paymentData)
+    TefpayService-->>BackendApp: Parámetros para formulario Tefpay
+    BackendApp-->>ClientApp: Redirección o datos para formulario Tefpay
+    ClientApp->>User: Muestra formulario de pago (o redirige)
+    User->>TefpayServer: Envía datos de pago
+    TefpayServer-->>User: Resultado del pago (Redirección a URL_OK/URL_KO)
+    TefpayServer->>BackendApp: Notificación Webhook POST /payments/tefpay/notifications (S2S)
+    BackendApp->>TefpayService: handleWebhookNotification(notificationData)
+    TefpayService->>TefpayService: verifySignature(notificationData)
+    alt Firma Válida
+        TefpayService->>BackendApp: Procesa notificación (actualiza Payment, crea Subscription si aplica)
+        BackendApp-->>TefpayServer: HTTP 200 OK
+    else Firma Inválida
+        TefpayService-->>BackendApp: Error de firma
+        BackendApp-->>TefpayServer: HTTP 400/500 Error
+    end
+    User->>ClientApp: Redirigido a URL_OK/URL_KO
+    ClientApp->>BackendApp: (Opcional) Verifica estado del pago/suscripción
+    BackendApp-->>ClientApp: Estado actualizado
+```
+
+## Inyección de Dependencias y Módulos
+
+El `PaymentsModule` ahora es global (`@Global()`) para facilitar la inyección del `IPaymentProcessor` en otros módulos, como `SubscriptionsModule`.
+
+```typescript
+// src/payments/payments.module.ts
+import { Module, Global, forwardRef } from "@nestjs/common";
+import { PaymentsController } from "./payments.controller";
+import { PaymentsService } from "./payments.service";
+import { TefpayService } from "./tefpay/tefpay.service";
+import { PAYMENT_PROCESSOR_TOKEN } from "./payment-processor.token";
+import { SubscriptionsModule } from "../subscriptions/subscriptions.module"; // Importación con forwardRef
+import { TefpayNotificationsModule } from "./tefpay/notifications/notifications.module"; // Importación con forwardRef
+
+@Global() // Hace el módulo global
+@Module({
+  imports: [
+    // ... otros módulos ...
+    forwardRef(() => SubscriptionsModule), // Resuelve dependencia circular
+    forwardRef(() => TefpayNotificationsModule), // Resuelve dependencia circular
+  ],
+  controllers: [PaymentsController],
+  providers: [
+    PaymentsService,
+    {
+      provide: PAYMENT_PROCESSOR_TOKEN, // Token de inyección para IPaymentProcessor
+      useClass: TefpayService, // Implementación por defecto (Tefpay)
+    },
+    // ... otros providers ...
+  ],
+  exports: [
+    PaymentsService,
+    PAYMENT_PROCESSOR_TOKEN, // Exporta el token para que otros módulos puedan inyectar IPaymentProcessor
+  ],
+})
+export class PaymentsModule {}
+```
 
 ## Flujo de Pago Típico
 

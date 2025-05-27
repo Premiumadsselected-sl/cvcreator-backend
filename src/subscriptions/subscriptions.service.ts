@@ -1,9 +1,10 @@
 import {
+  Inject,
   Injectable,
   NotFoundException,
   BadRequestException,
   Logger,
-} from "@nestjs/common"; // NotFoundException eliminada si no se usa // MODIFICADO: Añadido NotFoundException, BadRequestException, Logger
+} from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateSubscriptionDto } from "./dto/create-subscription.dto";
 import { UpdateSubscriptionDto } from "./dto/update-subscription.dto";
@@ -19,15 +20,18 @@ import {
 } from "./dto/subscription.dto"; // Renombrar el enum del DTO para evitar colisión
 import { AuditLogsService } from "../audit-logs/audit-logs.service"; // Importar AuditLogsService
 import { AuditAction } from "../audit-logs/dto/audit-action.enum"; // Importar AuditAction
-import { TefpayService } from "../payments/tefpay/tefpay.service"; // AÑADIDO
+// import { TefpayService } from "../payments/tefpay/tefpay.service"; // ELIMINADO
+import { IPaymentProcessor } from "../payments/processors/payment-processor.interface";
+import { PAYMENT_PROCESSOR_TOKEN } from "../payments/payment-processor.token"; // AÑADIDO: Importar el token real
 
 // ADDED: Define a type for the createFromPayment method arguments
 interface CreateSubscriptionFromPaymentParams {
   user_id: string;
   plan_id: string;
-  status: PrismaSubscriptionStatus; // MODIFICADO: Usar PrismaSubscriptionStatus
-  tefpay_transaction_id?: string | null;
-  tefpay_subscription_account?: string | null;
+  status: PrismaSubscriptionStatus;
+  processor_transaction_id?: string | null; // MODIFIED
+  processor_subscription_id?: string | null; // MODIFIED
+  payment_processor_name?: string | null; // ADDED
   payment_id: string;
   trial_start?: Date | null;
   trial_end?: Date | null;
@@ -44,7 +48,8 @@ export class SubscriptionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditLogsService: AuditLogsService, // Inyectar AuditLogsService
-    private readonly tefpayService: TefpayService // AÑADIDO: Inyectar TefpayService (o un PaymentProcessorResolver)
+    @Inject(PAYMENT_PROCESSOR_TOKEN) // MODIFICADO: Usar el Symbol del token importado
+    private readonly paymentProcessor: IPaymentProcessor // AÑADIDO
   ) {}
 
   async create(
@@ -78,16 +83,17 @@ export class SubscriptionsService {
   // ADDED: New method to create a subscription from a payment
   async createFromPayment(
     params: CreateSubscriptionFromPaymentParams,
-    tx?: Prisma.TransactionClient // Added tx parameter here as well
+    tx?: Prisma.TransactionClient
   ): Promise<Subscription> {
-    const prismaClient = params.tx || tx || this.prisma; // Use tx from params if available, then from method, then default
+    const prismaClient = params.tx || tx || this.prisma;
     const {
       user_id,
       plan_id,
       status,
-      tefpay_transaction_id,
-      tefpay_subscription_account,
-      payment_id, // Assuming payment_id is for logging/metadata, not a direct relation to Payment model for this creation path
+      processor_transaction_id, // MODIFIED
+      processor_subscription_id, // MODIFIED
+      payment_processor_name, // ADDED
+      payment_id,
       trial_start,
       trial_end,
       current_period_start,
@@ -98,11 +104,9 @@ export class SubscriptionsService {
     const data: Prisma.SubscriptionCreateInput = {
       user: { connect: { id: user_id } },
       plan: { connect: { id: plan_id } },
-      status: status, // MODIFICADO: 'status' ya es de tipo PrismaSubscriptionStatus desde la interfaz
-      tefpay_transaction_id: tefpay_transaction_id,
-      tefpay_subscription_account: tefpay_subscription_account,
-      // payment_id is not directly on the Subscription model in the same way as user_id/plan_id
-      // It can be stored in metadata if needed, or handled via the Payment model's subscription_id relation
+      status: status,
+      processor_subscription_id: processor_subscription_id, // MODIFIED
+      payment_processor_name: payment_processor_name, // ADDED
       trial_start,
       trial_end,
       current_period_start,
@@ -110,6 +114,9 @@ export class SubscriptionsService {
       metadata: metadata || {
         source: "payment_creation",
         payment_id: payment_id,
+        ...(processor_transaction_id && {
+          original_payment_processor_transaction_id: processor_transaction_id, // MODIFIED
+        }),
       },
     };
 
@@ -124,8 +131,9 @@ export class SubscriptionsService {
         plan_id,
         status,
         payment_id,
-        tefpay_transaction_id,
-        tefpay_subscription_account,
+        processor_transaction_id, // MODIFIED
+        processor_subscription_id, // MODIFIED
+        payment_processor_name, // ADDED
         source: "createFromPayment",
       }),
     });
@@ -136,13 +144,12 @@ export class SubscriptionsService {
   async findByProcessorSubscriptionId(
     processorSubscriptionId: string,
     tx?: Prisma.TransactionClient,
-    include?: Prisma.SubscriptionInclude // Añadido parámetro include
+    include?: Prisma.SubscriptionInclude
   ): Promise<(Subscription & { plan?: any }) | null> {
-    // Tipo de retorno ajustado
     const prismaClient = tx || this.prisma;
     return prismaClient.subscription.findUnique({
-      where: { tefpay_subscription_account: processorSubscriptionId },
-      include: include, // Usar el parámetro include
+      where: { processor_subscription_id: processorSubscriptionId }, // MODIFIED
+      include: include,
     });
   }
 
@@ -431,7 +438,7 @@ export class SubscriptionsService {
       createdAt: sub.createdAt,
       updatedAt: sub.updatedAt,
       // plan: sub.plan ? { id: sub.plan.id, name: sub.plan.name, ... } : undefined, // Si se incluye el plan
-      // tefpay_transaction_id: sub.tefpay_transaction_id ?? undefined, // Si existe en el modelo
+      // tefpay_transaction_id: sub.tefpay_transaction_id ?? undefined, // ELIMINADO - Este campo no debería usarse directamente en el DTO si se busca agnosticismo
       // metadata: sub.metadata ?? undefined, // Si existe en el modelo y DTO
     }));
   }
@@ -476,14 +483,12 @@ export class SubscriptionsService {
       );
     }
 
-    // Check if the subscription is in a state that allows cancellation
     const cancellableStatuses: PrismaSubscriptionStatus[] = [
       PrismaSubscriptionStatus.ACTIVE,
       PrismaSubscriptionStatus.TRIALING,
       PrismaSubscriptionStatus.PAST_DUE,
     ];
     if (!cancellableStatuses.includes(subscription.status)) {
-      // Eliminado el casteo innecesario
       throw new BadRequestException(
         `Subscription is already in status '${subscription.status}' and cannot be cancelled.`
       );
@@ -498,21 +503,28 @@ export class SubscriptionsService {
       );
     }
 
-    // Call the payment processor to inform about the cancellation if needed.
-    // For Tefpay, this might be a formality or a specific API call if they manage recurring tokens.
-    const processorResponse =
-      await this.tefpayService.requestSubscriptionCancellation({
-        subscriptionId: subscription.id, // Use our internal ID
-        // processorSubscriptionId: subscription.tefpay_subscription_account, // Pass if TefpayService needs it
+    if (subscription.processor_subscription_id) {
+      // MODIFIED
+      const processorResponse = await this.paymentProcessor
+        .requestSubscriptionCancellation!({
+        processorSubscriptionId: subscription.processor_subscription_id, // MODIFIED
         cancellationReason,
       });
 
-    if (!processorResponse.success) {
-      this.logger.error(
-        `Payment processor failed to acknowledge cancellation for subscription ${subscriptionId}: ${processorResponse.message}`
+      if (!processorResponse.success) {
+        this.logger.error(
+          `Payment processor failed to acknowledge cancellation for subscription ${subscriptionId} (Processor ID: ${subscription.processor_subscription_id}): ${processorResponse.message}` // MODIFIED
+        );
+        throw new BadRequestException(
+          `Could not process cancellation with payment provider: ${processorResponse.message}`
+        );
+      }
+      this.logger.log(
+        `Payment processor acknowledged cancellation for subscription ${subscriptionId} (Processor ID: ${subscription.processor_subscription_id})` // MODIFIED
       );
-      throw new BadRequestException(
-        `Could not process cancellation with payment provider: ${processorResponse.message}`
+    } else {
+      this.logger.warn(
+        `Subscription ${subscriptionId} does not have a processor subscription account ID. Skipping direct cancellation with payment processor.` // MODIFIED
       );
     }
 
@@ -521,12 +533,10 @@ export class SubscriptionsService {
     const updatedSubscription = await this.prisma.subscription.update({
       where: { id: subscriptionId },
       data: {
-        status: PrismaSubscriptionStatus.PENDING_CANCELLATION, // MODIFICADO
+        status: PrismaSubscriptionStatus.PENDING_CANCELLATION,
         requested_cancellation_at: new Date(),
         cancel_at: cancelAtDate,
         cancel_at_period_end: true,
-        // Keep current_period_end as is, it signifies when the service access ends.
-        // ended_at will be set by the cron job when cancel_at is reached.
       },
     });
 

@@ -717,7 +717,139 @@
           "response": []
         },
         {
-          "name": "Handle Tefpay Notifications",
+          "name": "Handle Tefpay Notification - Generic/Base",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Ds_Date",
+                  "value": "26/05/2025",
+                  "type": "text",
+                  "description": "Fecha de la transacción (DD/MM/YYYY)"
+                },
+                {
+                  "key": "Ds_Hour",
+                  "value": "10:30",
+                  "type": "text",
+                  "description": "Hora de la transacción (HH:MM)"
+                },
+                {
+                  "key": "Ds_Amount",
+                  "value": "1000",
+                  "type": "text",
+                  "description": "Importe en céntimos (ej. 10.00 EUR)"
+                },
+                {
+                  "key": "Ds_Currency",
+                  "value": "978",
+                  "type": "text",
+                  "description": "Código de moneda (978 para EUR)"
+                },
+                {
+                  "key": "Ds_Merchant_MerchantCode",
+                  "value": "{{TEFPAY_MERCHANT_CODE}}",
+                  "type": "text",
+                  "description": "Tu código de comercio Tefpay (variable de entorno Postman)"
+                },
+                {
+                  "key": "Ds_Merchant_MatchingData",
+                  "value": "TESTORDER12345",
+                  "type": "text",
+                  "description": "ID de referencia de la transacción/suscripción de Tefpay. Este valor es crucial para la validación de la firma S2S y para vincular la notificación con la transacción original. En el caso de una notificación relacionada con una suscripción creada a través del formulario, este campo (o Ds_Merchant_Subscription_Account si Ds_Merchant_MatchingData no está presente en la notificación) debería corresponder al valor enviado originalmente en Ds_Merchant_MatchingData/Ds_Merchant_Subscription_Account en el formulario."
+                },
+                {
+                  "key": "Ds_Merchant_Url",
+                  "value": "{{TEFPAY_NOTIFY_URL}}",
+                  "type": "text",
+                  "description": "Tu URL de notificación S2S (variable de entorno Postman)"
+                },
+                {
+                  "key": "Ds_Code",
+                  "value": "100",
+                  "type": "text",
+                  "description": "Código de respuesta de Tefpay (ej. \\\"100\\\" para éxito)"
+                },
+                {
+                  "key": "Ds_Message",
+                  "value": "Transacción aprobada",
+                  "type": "text",
+                  "description": "Mensaje de respuesta de Tefpay"
+                },
+                {
+                  "key": "Ds_TransactionId",
+                  "value": "TEFPAYTRANSID001",
+                  "type": "text",
+                  "description": "ID de transacción de Tefpay"
+                },
+                {
+                  "key": "Ds_PanMask",
+                  "value": "454881******0004",
+                  "type": "text",
+                  "description": "Máscara de la tarjeta (opcional)"
+                },
+                {
+                  "key": "Ds_Expiry",
+                  "value": "2512",
+                  "type": "text",
+                  "description": "Fecha de caducidad de la tarjeta (AAMM) (opcional)"
+                },
+                {
+                  "key": "Ds_MerchantData",
+                  "value": "{\"custom_field\":\"custom_value\",\"payment_code\":\"TESTORDER12345\"}",
+                  "type": "text",
+                  "description": "Datos adicionales (opcional, JSON string)"
+                },
+                {
+                  "key": "Ds_Signature",
+                  "value": "CALCULATED_SHA1_SIGNATURE",
+                  "type": "text",
+                  "description": "Firma SHA1 calculada (ver descripción de la solicitud)"
+                },
+                {
+                  "key": "Ds_Merchant_TransactionType",
+                  "value": "A",
+                  "type": "text",
+                  "description": "(Opcional) Tipo de transacción Tefpay"
+                },
+                {
+                  "key": "Ds_Secure",
+                  "value": "1",
+                  "type": "text",
+                  "description": "(Opcional) Indicador 3D Secure"
+                },
+                {
+                  "key": "Ds_Card_Brand",
+                  "value": "VISA",
+                  "type": "text",
+                  "description": "(Opcional) Marca de la tarjeta"
+                },
+                {
+                  "key": "Ds_Merchant_Subscription_Account",
+                  "value": "SUBACCOUNT123",
+                  "type": "text",
+                  "description": "(Opcional) ID de cuenta de suscripción"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/tefpay/notifications",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payments", "tefpay", "notifications"]
+            },
+            "description": "Maneja las notificaciones S2S entrantes de Tefpay. \\\\\\\\n\\\\\\\\n**IMPORTANTE PARA PRUEBAS S2S (SHA1):**\\\\\\\\n\\\\\\\\n1.  **Configura Variables de Entorno en Postman:**\\\\\\\\n    *   `TEFPAY_MERCHANT_CODE`: Tu código de comercio real de Tefpay (o el valor de `TEFPAY_MERCHANT_CODE` de tu `.env` si pruebas localmente).\\\\\\\\n    *   `TEFPAY_NOTIFY_URL`: La URL completa donde tu API recibe estas notificaciones (ej. `http://localhost:3001/api/payments/tefpay/notifications` o tu URL de despliegue). Este valor debe coincidir con el campo `Ds_Merchant_Url` del cuerpo de esta solicitud si se envía, o con el valor de `TEFPAY_NOTIFY_URL` en tu `.env` si `Ds_Merchant_Url` no está presente en el payload.\\\\\\\\n    *   `TEFPAY_PRIVATE_KEY`: Tu clave secreta compartida de Tefpay (la que está en tu `.env` como `TEFPAY_PRIVATE_KEY`).\\\\\\\\n    *   `TEFPAY_DS_AMOUNT`: (Opcional, para fallback) El valor de `TEFPAY_DS_AMOUNT` de tu `.env` si el campo `Ds_Amount` no se envía en el payload.\\\\\\\\n\\\\\\\\n2.  **Calcula `Ds_Signature` (SHA1):**\\\\\\\\n    *   La firma se calcula con la fórmula: `Ds_Amount_Valor + Ds_Merchant_MerchantCode_Valor + Ds_Merchant_MatchingData_Valor + Ds_Merchant_Url_Valor + ClavePrivadaTefpay`.\\\\\\\\n    *   **Valores a usar para la concatenación:**\\\\\\\\n        *   `Ds_Amount_Valor`: El valor del campo `Ds_Amount` del cuerpo de esta solicitud. Si `Ds_Amount` no está presente o está vacío, usa el valor de tu variable de entorno `TEFPAY_DS_AMOUNT`.\\\\\\\\n        *   `Ds_Merchant_MerchantCode_Valor`: El valor del campo `Ds_Merchant_MerchantCode` del cuerpo. Si no está presente o está vacío, usa el valor de tu variable de entorno `TEFPAY_MERCHANT_CODE`.\\\\\\\\n        *   `Ds_Merchant_MatchingData_Valor`: El valor del campo `Ds_Merchant_MatchingData` del cuerpo. Si no está presente o está vacío, usa el valor del campo `Ds_Merchant_Subscription_Account` del cuerpo.\\\\\\\\n        *   `Ds_Merchant_Url_Valor`: El valor del campo `Ds_Merchant_Url` del cuerpo. Si no está presente o está vacío, usa el valor de tu variable de entorno `TEFPAY_NOTIFY_URL`.\\\\\\\\n        *   `ClavePrivadaTefpay`: El valor de tu variable de entorno `TEFPAY_PRIVATE_KEY`.\\\\\\\\n    *   Concatena estos valores **exactos** en el orden especificado.\\\\\\\\n    *   Aplica un hash SHA1 a la cadena resultante. El resultado debe ser hexadecimal en minúsculas.\\\\\\\\n    *   Reemplaza `CALCULATED_SHA1_SIGNATURE` con esta firma calculada.\\\\\\\\n\\\\\\\\n    **Ejemplo de cadena base para firmar (ANTES de SHA1), asumiendo que todos los campos están presentes en el payload:**\\\\\\\\n    `VALOR_Ds_Amount + VALOR_Ds_Merchant_MerchantCode + VALOR_Ds_Merchant_MatchingData + VALOR_Ds_Merchant_Url + VALOR_TEFPAY_PRIVATE_KEY`\\\\\\\\n\\\\\\\\n    *Asegúrate de que los valores de las variables de entorno se resuelven correctamente al construir esta cadena para el cálculo manual o con script, especialmente si algunos campos del payload se omiten para probar los fallbacks.*\\\\\\\\n\\\\\\\\n3.  **Ajusta los campos del cuerpo según tu caso de prueba.** Los valores proporcionados son ejemplos. Considera probar escenarios donde algunos campos (`Ds_Amount`, `Ds_Merchant_MerchantCode`, `Ds_Merchant_MatchingData`, `Ds_Merchant_Url`) se omiten para verificar la lógica de fallback."
+          },
+          "response": []
+        },
+        {
+          "name": "Notify - Pago Inicial Exitoso",
           "request": {
             "method": "POST",
             "header": [
@@ -736,59 +868,32 @@
                   "description": "Opcional. Usado para la verificación de firma S2S. Ejemplo: HMAC_SHA256_V1. Desmarcar/deshabilitar si no se envía.",
                   "disabled": true
                 },
-                {
-                  "key": "Ds_Code",
-                  "value": "0000",
-                  "type": "text"
-                },
-                {
-                  "key": "Ds_Date",
-                  "value": "YYYYMMDD",
-                  "type": "text"
-                },
-                {
-                  "key": "Ds_Hour",
-                  "value": "HHMMSS",
-                  "type": "text"
-                },
+                { "key": "Ds_Code", "value": "0000", "type": "text" },
+                { "key": "Ds_Date", "value": "20250526", "type": "text" },
+                { "key": "Ds_Hour", "value": "100000", "type": "text" },
                 {
                   "key": "Ds_Order",
-                  "value": "your_payment_id_or_order_reference",
+                  "value": "order_initial_success_123",
                   "type": "text"
                 },
-                {
-                  "key": "Ds_Currency",
-                  "value": "978",
-                  "type": "text"
-                },
-                {
-                  "key": "Ds_Terminal",
-                  "value": "1",
-                  "type": "text"
-                },
-                {
-                  "key": "Ds_Card_Country",
-                  "value": "724",
-                  "type": "text"
-                },
+                { "key": "Ds_Currency", "value": "978", "type": "text" },
+                { "key": "Ds_Terminal", "value": "1", "type": "text" },
+                { "key": "Ds_Card_Country", "value": "724", "type": "text" },
                 {
                   "key": "Ds_MerchantCode",
                   "value": "your_tefpay_merchant_code",
                   "type": "text"
                 },
-                {
-                  "key": "Ds_SecurePayment",
-                  "value": "1",
-                  "type": "text"
-                },
+                { "key": "Ds_SecurePayment", "value": "1", "type": "text" },
                 {
                   "key": "Ds_TransactionType",
                   "value": "0",
-                  "type": "text"
+                  "type": "text",
+                  "description": "0: Pago normal"
                 },
                 {
                   "key": "Ds_AuthorisationCode",
-                  "value": "auth_code_if_successful",
+                  "value": "123456",
                   "type": "text"
                 },
                 {
@@ -798,23 +903,41 @@
                 },
                 {
                   "key": "Ds_Merchant_MatchingData",
-                  "value": "YOUR_UNIQUE_PAYMENT_CODE_HERE",
+                  "value": "PAYMENT_CODE_INITIAL_SUCCESS",
                   "type": "text",
                   "description": "Corresponde al 'payment_code' enviado durante la iniciación del pago. Usado para encontrar el registro de pago."
                 },
                 {
                   "key": "Ds_Merchant_TransactionID",
-                  "value": "tefpay_transaction_id_example_12345",
+                  "value": "tefpay_tx_id_initial_success",
                   "type": "text"
                 },
                 {
                   "key": "Ds_Merchant_Subscription_Account",
                   "value": "",
-                  "type": "text"
+                  "type": "text",
+                  "description": "Vacío para pago inicial no directamente ligado a una cuenta de suscripción preexistente."
+                },
+                {
+                  "key": "Ds_Merchant_Subscription_Action",
+                  "value": "",
+                  "type": "text",
+                  "description": "Vacío para un pago normal."
+                },
+                {
+                  "key": "Ds_Amount",
+                  "value": "1999",
+                  "type": "text",
+                  "description": "Ej: 19.99 EUR"
                 },
                 {
                   "key": "Ds_Signature",
-                  "value": "actual_tefpay_signature_received",
+                  "value": "mock_signature_initial_payment_success",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Message",
+                  "value": "Transacción Autorizada",
                   "type": "text"
                 }
               ]
@@ -824,7 +947,549 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "payments", "tefpay", "notifications"]
             },
-            "description": "Maneja las notificaciones entrantes de Tefpay (tanto S2S como no S2S). \\n\\nPara pruebas NO S2S (flujo actual):\\n- `Ds_SignatureVersion` puede omitirse (deshabilitado por defecto en esta solicitud).\\n- `Ds_Signature` debe estar presente (puede ser un valor dummy si la verificación está omitida en el backend).\\n- `Ds_Merchant_MatchingData` es CRUCIAL y debe contener el `payment_code` usado al iniciar el pago.\\n\\nPara pruebas S2S (cuando la verificación de firma esté activa):\\n- `Ds_SignatureVersion` debe habilitarse y tener el valor correcto (ej. HMAC_SHA256_V1).\\n- `Ds_Signature` debe ser la firma válida calculada por Tefpay.\\n- Otros parámetros (`DS_ORDER`, `DS_RESPONSE`, etc.) deben ser los enviados por Tefpay."
+            "description": "Simula una notificación de Tefpay para un pago inicial que ha sido exitoso. No crea una suscripción directamente a través de esta notificación (la suscripción se crearía en el backend si el plan lo requiere)."
+          },
+          "response": []
+        },
+        {
+          "name": "Notify - Pago Inicial Fallido",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Ds_SignatureVersion",
+                  "value": "HMAC_SHA256_V1",
+                  "type": "text",
+                  "disabled": true
+                },
+                {
+                  "key": "Ds_Code",
+                  "value": "0101",
+                  "type": "text",
+                  "description": "Ej: Tarjeta caducada"
+                },
+                { "key": "Ds_Date", "value": "20250526", "type": "text" },
+                { "key": "Ds_Hour", "value": "100500", "type": "text" },
+                {
+                  "key": "Ds_Order",
+                  "value": "order_initial_failed_456",
+                  "type": "text"
+                },
+                { "key": "Ds_Currency", "value": "978", "type": "text" },
+                { "key": "Ds_Terminal", "value": "1", "type": "text" },
+                {
+                  "key": "Ds_MerchantCode",
+                  "value": "your_tefpay_merchant_code",
+                  "type": "text"
+                },
+                { "key": "Ds_TransactionType", "value": "0", "type": "text" },
+                {
+                  "key": "Ds_AuthorisationCode",
+                  "value": "",
+                  "type": "text",
+                  "description": "Vacío en caso de fallo"
+                },
+                {
+                  "key": "Ds_Merchant_MatchingData",
+                  "value": "PAYMENT_CODE_INITIAL_FAILED",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Merchant_TransactionID",
+                  "value": "tefpay_tx_id_initial_failed",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Merchant_Subscription_Account",
+                  "value": "",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Merchant_Subscription_Action",
+                  "value": "",
+                  "type": "text"
+                },
+                { "key": "Ds_Amount", "value": "2999", "type": "text" },
+                {
+                  "key": "Ds_Signature",
+                  "value": "mock_signature_initial_payment_failed",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Message",
+                  "value": "Tarjeta caducada",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/tefpay/notifications",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payments", "tefpay", "notifications"]
+            },
+            "description": "Simula una notificación de Tefpay para un pago inicial que ha fallado."
+          },
+          "response": []
+        },
+        {
+          "name": "Notify - Alta Suscripción Exitosa",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Ds_SignatureVersion",
+                  "value": "HMAC_SHA256_V1",
+                  "type": "text",
+                  "disabled": true
+                },
+                { "key": "Ds_Code", "value": "0000", "type": "text" },
+                { "key": "Ds_Date", "value": "20250526", "type": "text" },
+                { "key": "Ds_Hour", "value": "101000", "type": "text" },
+                {
+                  "key": "Ds_Order",
+                  "value": "order_sub_create_789",
+                  "type": "text",
+                  "description": "Puede ser el ID de la orden del pago inicial que generó la suscripción"
+                },
+                { "key": "Ds_Currency", "value": "978", "type": "text" },
+                { "key": "Ds_Terminal", "value": "1", "type": "text" },
+                {
+                  "key": "Ds_MerchantCode",
+                  "value": "your_tefpay_merchant_code",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_TransactionType",
+                  "value": "A",
+                  "type": "text",
+                  "description": "'A' para Alta, o 'V' para Verificación. Consultar documentación Tefpay."
+                },
+                {
+                  "key": "Ds_AuthorisationCode",
+                  "value": "auth_sub_create",
+                  "type": "text",
+                  "description": "Podría ser el del pago inicial o uno nuevo."
+                },
+                {
+                  "key": "Ds_Merchant_MatchingData",
+                  "value": "PAYMENT_CODE_FOR_SUB_CREATION",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Merchant_TransactionID",
+                  "value": "tefpay_tx_id_sub_create",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Merchant_Subscription_Account",
+                  "value": "SUB_ACCOUNT_ID_12345",
+                  "type": "text",
+                  "description": "ID de la cuenta de suscripción devuelto por Tefpay."
+                },
+                {
+                  "key": "Ds_Merchant_Subscription_Action",
+                  "value": "A",
+                  "type": "text",
+                  "description": "'A' para Alta. Tefpay podría usar otros valores."
+                },
+                {
+                  "key": "Ds_Amount",
+                  "value": "0",
+                  "type": "text",
+                  "description": "El alta podría no tener monto, o tener el del primer pago."
+                },
+                {
+                  "key": "Ds_Signature",
+                  "value": "mock_signature_sub_creation_success",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Message",
+                  "value": "Alta de suscripción realizada",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/tefpay/notifications",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payments", "tefpay", "notifications"]
+            },
+            "description": "Simula una notificación de Tefpay para un alta de suscripción exitosa. Esto puede ocurrir después de un pago inicial o como una operación separada si Tefpay lo maneja así."
+          },
+          "response": []
+        },
+        {
+          "name": "Notify - Renovación Suscripción Exitosa",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "Ds_Code", "value": "0000", "type": "text" },
+                { "key": "Ds_Date", "value": "20250626", "type": "text" },
+                { "key": "Ds_Hour", "value": "110000", "type": "text" },
+                {
+                  "key": "Ds_Order",
+                  "value": "order_sub_renew_success_001",
+                  "type": "text"
+                },
+                { "key": "Ds_Currency", "value": "978", "type": "text" },
+                { "key": "Ds_Terminal", "value": "1", "type": "text" },
+                {
+                  "key": "Ds_MerchantCode",
+                  "value": "your_tefpay_merchant_code",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_TransactionType",
+                  "value": "P",
+                  "type": "text",
+                  "description": "'P' o 'T' para transacción sucesiva de una recurrencia."
+                },
+                {
+                  "key": "Ds_AuthorisationCode",
+                  "value": "auth_renew_success_654",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Merchant_MatchingData",
+                  "value": "MATCHING_DATA_RENEWAL_001",
+                  "type": "text",
+                  "description": "Puede ser un ID único para la transacción de renovación o el payment_code original."
+                },
+                {
+                  "key": "Ds_Merchant_TransactionID",
+                  "value": "tefpay_tx_id_renew_success",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Merchant_Subscription_Account",
+                  "value": "SUB_ACCOUNT_ID_12345",
+                  "type": "text",
+                  "description": "ID de la cuenta de suscripción existente."
+                },
+                {
+                  "key": "Ds_Merchant_Subscription_Action",
+                  "value": "",
+                  "type": "text",
+                  "description": "Generalmente vacío para un cobro recurrente."
+                },
+                {
+                  "key": "Ds_Amount",
+                  "value": "999",
+                  "type": "text",
+                  "description": "Monto de la renovación"
+                },
+                {
+                  "key": "Ds_Signature",
+                  "value": "mock_signature_sub_renewal_success",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Message",
+                  "value": "Cobro de suscripción realizado",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/tefpay/notifications",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payments", "tefpay", "notifications"]
+            },
+            "description": "Simula una notificación de Tefpay para una renovación de suscripción exitosa."
+          },
+          "response": []
+        },
+        {
+          "name": "Notify - Renovación Suscripción Fallida",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Ds_SignatureVersion",
+                  "value": "HMAC_SHA256_V1",
+                  "type": "text",
+                  "disabled": true
+                },
+                {
+                  "key": "Ds_Code",
+                  "value": "0184",
+                  "type": "text",
+                  "description": "Ej: Error al procesar la operación"
+                },
+                { "key": "Ds_Date", "value": "20250626", "type": "text" },
+                { "key": "Ds_Hour", "value": "110500", "type": "text" },
+                {
+                  "key": "Ds_Order",
+                  "value": "order_sub_renew_failed_002",
+                  "type": "text"
+                },
+                { "key": "Ds_Currency", "value": "978", "type": "text" },
+                { "key": "Ds_Terminal", "value": "1", "type": "text" },
+                {
+                  "key": "Ds_MerchantCode",
+                  "value": "your_tefpay_merchant_code",
+                  "type": "text"
+                },
+                { "key": "Ds_TransactionType", "value": "P", "type": "text" },
+                { "key": "Ds_AuthorisationCode", "value": "", "type": "text" },
+                {
+                  "key": "Ds_Merchant_MatchingData",
+                  "value": "MATCHING_DATA_RENEWAL_002",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Merchant_TransactionID",
+                  "value": "tefpay_tx_id_renew_failed",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Merchant_Subscription_Account",
+                  "value": "SUB_ACCOUNT_ID_12345",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Merchant_Subscription_Action",
+                  "value": "",
+                  "type": "text"
+                },
+                { "key": "Ds_Amount", "value": "999", "type": "text" },
+                {
+                  "key": "Ds_Signature",
+                  "value": "mock_signature_sub_renewal_failed",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Message",
+                  "value": "Operación denegada",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/tefpay/notifications",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payments", "tefpay", "notifications"]
+            },
+            "description": "Simula una notificación de Tefpay para una renovación de suscripción fallida."
+          },
+          "response": []
+        },
+        {
+          "name": "Notify - Baja Suscripción",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Ds_Date",
+                  "value": "27/05/2025",
+                  "type": "text",
+                  "description": "Fecha de la notificación (DD/MM/YYYY)"
+                },
+                {
+                  "key": "Ds_Hour",
+                  "value": "14:30",
+                  "type": "text",
+                  "description": "Hora de la notificación (HH:MM)"
+                },
+                {
+                  "key": "Ds_Amount",
+                  "value": "0",
+                  "type": "text",
+                  "description": "Importe en céntimos. Generalmente 0 para una baja."
+                },
+                {
+                  "key": "Ds_Currency",
+                  "value": "978",
+                  "type": "text",
+                  "description": "Código de moneda (978 para EUR)"
+                },
+                {
+                  "key": "Ds_Merchant_MerchantCode",
+                  "value": "{{TEFPAY_MERCHANT_CODE}}",
+                  "type": "text",
+                  "description": "Tu código de comercio Tefpay (variable de entorno Postman)"
+                },
+                {
+                  "key": "Ds_Merchant_MatchingData",
+                  "value": "MATCHING_DATA_SUB_TO_CANCEL",
+                  "type": "text",
+                  "description": "MatchingData de la transacción original que creó/modificó la suscripción, o el ID de la suscripción si es diferente y se usa para conciliar."
+                },
+                {
+                  "key": "Ds_Merchant_Url",
+                  "value": "{{TEFPAY_NOTIFY_URL}}",
+                  "type": "text",
+                  "description": "Tu URL de notificación S2S (variable de entorno Postman)"
+                },
+                {
+                  "key": "Ds_Code",
+                  "value": "0000",
+                  "type": "text",
+                  "description": "Código de Tefpay indicando baja exitosa (ej. \\\"0000\\\"). Consultar documentación de Tefpay para el código exacto."
+                },
+                {
+                  "key": "Ds_Message",
+                  "value": "Suscripción cancelada por el procesador.",
+                  "type": "text",
+                  "description": "Mensaje de respuesta de Tefpay"
+                },
+                {
+                  "key": "Ds_TransactionId",
+                  "value": "TEFPAY_TRANSID_FOR_CANCEL_EVENT",
+                  "type": "text",
+                  "description": "ID de transacción de Tefpay si lo envían para eventos de baja (puede ser opcional o no aplicar)."
+                },
+                {
+                  "key": "Ds_Merchant_Subscription_Account",
+                  "value": "SUB_ACCOUNT_ID_TO_CANCEL_123",
+                  "type": "text",
+                  "description": "ID de cuenta de suscripción en Tefpay que se da de baja."
+                },
+                {
+                  "key": "Ds_Merchant_Subscription_Action",
+                  "value": "B",
+                  "type": "text",
+                  "description": "Acción de suscripción: 'B' para Baja. Confirmar valor exacto con Tefpay."
+                },
+                {
+                  "key": "Ds_Signature",
+                  "value": "CALCULATE_SHA1_FOR_BAJA",
+                  "type": "text",
+                  "description": "Firma SHA1 calculada. Consulta la descripción de 'Handle Tefpay Notification - Generic/Base' para la receta de cálculo."
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/tefpay/notifications",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payments", "tefpay", "notifications"]
+            },
+            "description": "Simula una notificación de Tefpay para una baja de suscripción (ej. iniciada por el usuario en Tefpay, por un administrador, o por fin de ciclo de vida). \\\\n\\\\n**Verifica la firma SHA1** usando la receta detallada en la solicitud 'Handle Tefpay Notification - Generic/Base'."
+          },
+          "response": []
+        },
+        {
+          "name": "Notify - Error Genérico Tefpay",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Ds_Date",
+                  "value": "27/05/2025",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Hour",
+                  "value": "15:00",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Amount",
+                  "value": "1000",
+                  "type": "text",
+                  "description": "Importe en céntimos (ej. 10.00 EUR) del pago que falló."
+                },
+                {
+                  "key": "Ds_Currency",
+                  "value": "978",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Merchant_MerchantCode",
+                  "value": "{{TEFPAY_MERCHANT_CODE}}",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Merchant_MatchingData",
+                  "value": "MATCHING_DATA_FOR_ERROR_CASE",
+                  "type": "text",
+                  "description": "MatchingData de la transacción original."
+                },
+                {
+                  "key": "Ds_Merchant_Url",
+                  "value": "{{TEFPAY_NOTIFY_URL}}",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_Code",
+                  "value": "9999",
+                  "type": "text",
+                  "description": "Código de error genérico de Tefpay (no un éxito como 0000 o 100). Consultar documentación Tefpay para códigos de error."
+                },
+                {
+                  "key": "Ds_Message",
+                  "value": "Error general del sistema Tefpay.",
+                  "type": "text"
+                },
+                {
+                  "key": "Ds_TransactionId",
+                  "value": "TEFPAY_TRANSID_FOR_ERROR",
+                  "type": "text",
+                  "description": "ID de transacción de Tefpay si se generó alguno antes del error."
+                },
+                {
+                  "key": "Ds_Signature",
+                  "value": "CALCULATE_SHA1_FOR_ERROR",
+                  "type": "text",
+                  "description": "Firma SHA1 calculada. Consulta la descripción de 'Handle Tefpay Notification - Generic/Base' para la receta de cálculo."
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/tefpay/notifications",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payments", "tefpay", "notifications"]
+            },
+            "description": "Simula una notificación de Tefpay para un error genérico o no manejado específicamente. Útil para probar cómo el sistema registra fallos inesperados. \\\\n\\\\n**Verifica la firma SHA1** usando la receta detallada en la solicitud 'Handle Tefpay Notification - Generic/Base'."
           },
           "response": []
         },
